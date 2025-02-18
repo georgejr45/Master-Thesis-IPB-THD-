@@ -1,0 +1,1394 @@
+---
+title: "Predicting plant Traits from NIRS data"
+authors: "Methun George and Dr. Steffen Neumann"
+date: "2025-02-17"
+output: 
+  html_document :
+    theme: cerulean
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,  warning=FALSE, message = FALSE)
+```
+Authors: Methun George and Dr. Steffen Neumann
+
+
+This vignette presents the application of two machine learning models, Partial Least Squares Regression (PLSR) and Random Forest (RF), for predicting plant leaf traits from Near-Infrared Spectroscopy (NIRS) data collected during an experiment on "Tree and mycorrhizal fungal diversity drive intraspecific and intraindividual trait variation in temperate forests: evidence from a tree diversity experiment" (https://doi.org/10.1111/1365-2435.14549) conducted by Pablo Castro Sánchez-Bermejo. The analysis includes extrapolation studies to assess the models' predictive performance beyond the calibration range, with a comparison of runtime, R², and RMSE values. Additionally, interactive plots and other relevant visualizations are incorporated to illustrate the methods and support the findings effectively.
+
+```{r}
+# Loading all the required libraries
+
+library(readxl) # For reading the data
+library(dplyr) # For data management
+library(tidyr) # For data management
+library(tfruns) # For training convolutional neural networks
+library(keras3) # For training convolutional neural networks
+library(plantspec) # For managing spectral data
+library(ggplot2) # For plotting predicted versus measured data
+library(ggExtra) # For plotting predicted versus measured data
+library(sfsmisc) # For data augmentation
+library(gridExtra) # For plot visualization
+library(plotly) # For interactive ggplots
+library(pls) # For PLS reggression
+library(caret) # For training 
+
+```
+
+# Datasets
+```{r echo=T, results="hide"}
+### Datasets ###
+
+plantspec.spectra <- read_excel("/Users/methungeorge/Desktop/IPB/pablo/dataset_20231010.xlsx", sheet = "Calibration set spectra") # Spectra calibration set
+plantspec.data <- read_excel("/Users/methungeorge/Desktop/IPB/pablo/dataset_20231010.xlsx", sheet = "Calibration set traits") # Trait calibration set
+
+plantspec.data$SLA <- as.numeric(plantspec.data$SLA)
+plantspec.data$LDMC <- as.numeric(plantspec.data$LDMC)
+plantspec.data$CN <- as.numeric(plantspec.data$CN)
+plantspec.data$C <- as.numeric(plantspec.data$C)
+plantspec.data$P <- as.numeric(plantspec.data$P)
+
+cbind(plantspec.spectra$Spectral.file.name, plantspec.data$File_name) # Checking correlation between both sets
+
+```
+
+```{r}
+
+# Reshape the data to long format
+long_input <- plantspec.spectra %>%
+  pivot_longer(
+    cols = -Spectral.file.name,
+    names_to = "Wavelength",
+    values_to = "Reflectance"
+  ) %>%
+  mutate(
+    Wavelength = as.numeric(Wavelength),
+    Spectral.file.name = as.factor(Spectral.file.name)  
+  )
+
+# Visualize reflectance distribution using a line plot 
+g <- ggplot(long_input, aes(x = Wavelength, y = Reflectance, color = Spectral.file.name)) +
+  geom_line(alpha = 0.6) +
+  scale_color_manual(values = rainbow(n = nlevels(long_input$Spectral.file.name))) +
+  labs(
+    title = "Reflectance Across Wavelengths",
+    x = "Wavelength (nm)",
+    y = "Reflectance"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "none") 
+
+# Convert to interactive plot
+ggplotly(g)
+
+```
+
+
+
+
+# Partial Least Squares Regression (PLSR)
+
+### Specific Leaf Area (SLA)
+
+```{r  echo=T, results="hide"}
+#SLA
+
+# Removing outlayer from the samples
+plantspec.data[which(is.na(plantspec.data$SLA)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$SLA)),]
+plantspec.data.sla <- plantspec.data[!is.na(plantspec.data$SLA),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.sla <- subset(plantspec.data.sla, Tree != "70_Ti3")
+
+# Studying the distribution of the values for SLA
+component_SLA <- plantspec.data.sla$SLA
+
+# split the data
+dimnames(input) = NULL
+set.seed(0)
+training_set <- !(subdivideDataset(spectra = input,
+                                   component = component_SLA,
+                                   method = "PCAKS", p = 0.3,
+                                   type = "validation"))
+
+# Center and Scale the input data with the use of Standard Normal Variate (SNV)
+input <- data.frame(input)
+SNV <- function(spectra){
+  spectra<-as.matrix(spectra)
+  spectrat<-t(spectra)
+  spectrat_snv<-scale(spectrat,center=TRUE,scale=TRUE)
+  spectra_snv<-t(spectrat_snv)
+  return(spectra_snv)}
+
+input <- data.frame(SNV(input))
+input <- as.matrix(input)
+# Scale the trait
+component_SLA_scaled <- scale(component_SLA) 
+
+# Split data into training and test sets based on your training_set index
+X_train <- input[training_set, ]
+Y_train <- component_SLA_scaled[training_set]
+X_test <- input[!training_set, ]
+Y_test <- component_SLA_scaled[!training_set]
+
+# Create a data frame for the train function
+train_data <- data.frame(SLA = Y_train, X_train)
+
+train_control <- trainControl(method = "cv", number = 20)
+
+
+start_time_pls <- Sys.time()
+pls_model <- train(SLA ~ ., data = train_data, method = "pls", tuneLength = 20, trControl = train_control)
+end_time_pls <- Sys.time()
+
+training_time_pls <- end_time_pls - start_time_pls
+print(training_time_pls)
+
+
+# Summary of the model
+summary(pls_model)
+
+# Find the index of the minimum RMSE
+rmse_values <- pls_model$results$RMSE
+optimal_components <- pls_model$results$ncomp[which.min(rmse_values)]
+
+# Predictions
+predictions_pls <- predict(pls_model, ncomp = optimal_components,  newdata = X_test)
+
+results_pls <- postResample(predictions_pls, Y_test)
+R_squared_pls <- results_pls[["Rsquared"]]
+
+R_squared_pls
+rmse_values <- postResample(pred = predictions_pls, obs = Y_test )
+rmse_values
+print(optimal_components)
+```
+
+
+
+#### ggplot of SLA prediction
+```{r }
+#ggplot
+# Convert Y_test and predictions to numeric 
+Y_test <- as.numeric(Y_test)
+predictions_pls <- as.numeric(predictions_pls)
+
+# Create a data frame with Actual and Predicted values
+pred_df <- data.frame(
+  Actual = Y_test,
+  Predicted = predictions_pls
+)
+
+
+p1 <- ggplot(pred_df, aes(x = Actual , y = Predicted)) +
+        geom_point(color = "#f03b20", alpha = 0.7) +
+        geom_abline(slope = 1, intercept = 0, color = "#756bb1", linetype = "dashed") +
+        labs( title = "Predicted Vs Actual SLA (PLSR)", x = "Actual SLA", y = "Predicted SLA") +
+        theme_minimal() 
+        
+
+ggplotly(p1)
+
+```
+
+```{r echo=T, results="hide"}
+# To enhance the clarity and organization of the vignette, a dedicated function named perform_plsr() has been created and saved in a separate file, perform_plsr.R. This function accepts spectral data and corresponding trait values as inputs. It performs Partial Least Squares Regression (PLSR), returning the trained PLSR model and the associated training time. By sourcing this function, the vignette is kept concise, while maintaining modularity and reusability in the codebase.
+
+source("/Users/methungeorge/Desktop/IPB/FINAL/ANALYSIS/NIRS/perform_plsr.R")
+
+# plot_gg() function creates a ggplot object from the data provided
+source("/Users/methungeorge/Desktop/IPB/FINAL/ANALYSIS/NIRS/plot.R")
+```
+
+
+
+### Leaf Dry Matter Content (LDMC)
+```{r echo=T, results="hide"}
+
+# Removing the outlayers
+plantspec.data[which(is.na(plantspec.data$LDMC)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$LDMC)),]
+plantspec.data.ldmc <- plantspec.data[!is.na(plantspec.data$LDMC),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.ldmc <- subset(plantspec.data.ldmc, Tree != "70_Ti3")
+
+# Extract the LDMC values
+component_LDMC <- plantspec.data.ldmc$LDMC
+
+# Train the PLSR-LDMC model
+model_ldmc <- perform_PLSR(input = input, trait = component_LDMC)
+results_ldmc <- model_ldmc$plsr_model
+
+# Scaled X and Y values
+Y_test_ldmc <- model_ldmc$Y_test
+X_test_ldmc <- model_ldmc$X_test
+
+# Find the index of the minimum RMSE
+rmse_values_ldmc <- results_ldmc$results$RMSE
+optimal_components_ldmc <- results_ldmc$results$ncomp[which.min(rmse_values_ldmc)]
+
+# Predictions
+predictions_pls_ldmc <- predict(results_ldmc, ncomp = optimal_components_ldmc,  newdata = X_test_ldmc)
+
+# R2 Value for LDMC
+results_pls_ldmc <- postResample(predictions_pls_ldmc, Y_test_ldmc)
+print (results_pls_ldmc)
+
+
+
+```
+
+#### ggplot of LDMC prediction
+```{r}
+plot_ldmc <- plot_gg(predictions_pls_ldmc, Y_test_ldmc,
+                     title = "Predicted Vs Actual LDMC (PLSR)",
+                     x_label = "Actual LDMC",
+                     y_label = "Predicted LDMC",
+                     point_color = "#31a354",
+                     line_color = "#e34a33")
+ggplotly(plot_ldmc)
+
+```
+
+### Carbon to Nitrogen ratio (C:N)
+```{r echo=T, results="hide"}
+# Removing the outlayers
+plantspec.data[which(is.na(plantspec.data$CN)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$CN)),]
+plantspec.data.cn <- plantspec.data[!is.na(plantspec.data$CN),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.cn <- subset(plantspec.data.cn, Tree != "70_Ti3")
+
+# Extract the CN values
+component_CN <- plantspec.data.cn$CN
+
+# Train the PLSR-CN model
+model_cn <- perform_PLSR(input = input, trait = component_CN)
+results_cn <- model_cn$plsr_model
+
+# Scaled X and Y values
+Y_test_cn <- model_cn$Y_test
+X_test_cn <- model_cn$X_test
+
+# Find the index of the minimum RMSE
+rmse_values_cn <- results_cn$results$RMSE
+optimal_components_cn <- results_cn$results$ncomp[which.min(rmse_values_cn)]
+
+# Predictions
+predictions_pls_cn <- predict(results_cn, ncomp = optimal_components_cn,  newdata = X_test_cn)
+
+# R2 Value for CN
+results_pls_cn <- postResample(predictions_pls_cn, Y_test_cn)
+print (results_pls_cn)
+
+
+
+```
+
+#### ggplot of CN prediction
+```{r}
+plot_cn <- plot_gg(predictions_pls_cn, Y_test_cn,
+                     title = "Predicted Vs Actual CN (PLSR)",
+                     x_label = "Actual CN",
+                     y_label = "Predicted CN",
+                     point_color = "#c51b8a",
+                     line_color = "#e34a33")
+ggplotly(plot_cn)
+
+```
+
+### Carbon content (C)
+```{r echo=T, results="hide"}
+
+# Removing the outlayers
+plantspec.data[which(is.na(plantspec.data$C)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$C)),]
+plantspec.data.c <- plantspec.data[!is.na(plantspec.data$C),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.c <- subset(plantspec.data.c, Tree != "70_Ti3")
+
+# Extract the C values
+component_C <- plantspec.data.c$C
+
+# Train the PLSR-C model
+model_c <- perform_PLSR(input = input, trait = component_C)
+results_c <- model_c$plsr_model
+
+# Scaled X and Y values
+Y_test_c <- model_c$Y_test
+X_test_c <- model_c$X_test
+
+# Find the index of the minimum RMSE
+rmse_values_c <- results_c$results$RMSE
+optimal_components_c <- results_c$results$ncomp[which.min(rmse_values_c)]
+
+# Predictions
+predictions_pls_c <- predict(results_c, ncomp = optimal_components_c,  newdata = X_test_c)
+
+# R2 Value for C
+results_pls_c <- postResample(predictions_pls_c, Y_test_c)
+print (results_pls_c)
+
+
+
+```
+#### ggplot of Carbon content prediction
+```{r}
+
+plot_c <- plot_gg(predictions_pls_c, Y_test_c,
+                     title = "Predicted Vs Actual C (PLSR)",
+                     x_label = "Actual C",
+                     y_label = "Predicted C",
+                     point_color = "#756bb1",
+                     line_color = "#e34a33")
+ggplotly(plot_c)
+
+```
+
+
+### Phosphorus Content (P)
+```{r echo=T, results="hide"}
+# Removing the outlayers
+
+plantspec.spectra2 <- read_excel("/Users/methungeorge/Desktop/IPB/pablo/dataset_20231010.xlsx", sheet = "Kreinitz set spectra") # Spectral Kreinitz set
+plantspec.data2 <- read_excel("/Users/methungeorge/Desktop/IPB/pablo/dataset_20231010.xlsx", sheet = "Kreinitz set traits") # Traits Kreinitz set
+
+cbind(plantspec.spectra2$Spectral.file.name, plantspec.data2$Level_ID) # Checking correlation between both sets
+
+# Removing outlayer from the samples
+plantspec.data[which(is.na(plantspec.data$P)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$P)),]
+plantspec.data.p <- plantspec.data[!is.na(plantspec.data$P),]
+input <- input[-which(plantspec.data.p$Tree == "75_So2"),]
+plantspec.data.p <- subset(plantspec.data.p, Tree != "75_So2")
+input <- input[-which(plantspec.data.p$Tree == "16_Be3"),]
+plantspec.data.p <- subset(plantspec.data.p, Tree != "16_Be3")
+input <- input[-which(plantspec.data.p$Tree == "71_Fa3"),]
+plantspec.data.p <- subset(plantspec.data.p, Tree != "71_Fa3")
+
+plantspec.data[which(is.na(plantspec.data2$P)),]
+
+# Preprocessing of second dataset
+input2 <- as.matrix(plantspec.spectra2[, -1])
+input2 <- input2[-which(plantspec.data2$Level_ID == "B16_Li17_3"),]
+plantspec.data2 <- subset(plantspec.data2, Level_ID != "B16_Li17_3")
+input2 <- input2[-which(plantspec.data2$Level_ID == "B41_Es11_3"),]
+plantspec.data2 <- subset(plantspec.data2, Level_ID != "B41_Es11_3")
+
+# Studying the distribution of the values for P
+component_P <- c(plantspec.data.p$P, plantspec.data2$P)
+component_P <- as.numeric(component_P)
+
+input <- data.frame(rbind(input, input2))
+input <- as.matrix(input)
+
+# Train the PLSR-P model
+model_p <- perform_PLSR(input = input, trait = component_P)
+results_p <- model_p$plsr_model
+
+# Scaled X and Y values
+Y_test_p <- model_p$Y_test
+X_test_p <- model_p$X_test
+
+# Find the index of the minimum RMSE
+rmse_values_p <- results_p$results$RMSE
+optimal_components_p <- results_p$results$ncomp[which.min(rmse_values_p)]
+
+# Predictions
+predictions_pls_p <- predict(results_p, ncomp = optimal_components_p,  newdata = X_test_p)
+
+# R2 Value for P
+results_pls_p <- postResample(predictions_pls_p, Y_test_p)
+print (results_pls_p)
+
+
+
+```
+
+#### ggplot of Phosphorus content prediction
+```{r}
+
+plot_p <- plot_gg(predictions_pls_p, Y_test_p,
+                     title = "Predicted Vs Actual P (PLSR)",
+                     x_label = "Actual P",
+                     y_label = "Predicted P",
+                     point_color = "#636363",
+                     line_color = "#e34a33")
+ggplotly(plot_p)
+
+```
+
+### Extrapolation study on PLSR
+
+In this study, an extrapolation approach was applied to evaluate the performance of Partial Least Squares Regression (PLSR) under extreme conditions. For both high and low data ranges, a specific data splitting strategy was employed. In the highest range, 70% of the data was used for training, while the top 30% of values within this subset were reserved for testing. A similar approach was applied to the lowest data range, where the bottom 30% of values were selected for testing, with the remaining data used for training. This methodology allows for assessing the model’s ability to predict beyond the range of observed values, providing insights into its extrapolation capabilities.
+
+#### Extrapolation on Highest range
+
+######### Extrapolation by using the highest 30% ##############
+
+```{r echo=T, results="hide"}
+# Removing outlayer from the samples
+plantspec.data[which(is.na(plantspec.data$SLA)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$SLA)),]
+plantspec.data.sla <- plantspec.data[!is.na(plantspec.data$SLA),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.sla <- subset(plantspec.data.sla, Tree != "70_Ti3")
+
+# Studying the distribution of the values for SLA
+component_SLA <- plantspec.data.sla$SLA
+
+#we manually select the extreme values from both sides
+X <- input  
+Y <- plantspec.data.sla$SLA  
+
+# Scale the input (spectral data) and SLA values for better model
+X_scaled <- scale(X)            
+Y_scaled <- scale(Y)
+
+set.seed(0)
+#Highest 30% of Values
+cutoff <- quantile(component_SLA, 0.7, na.rm = TRUE)
+#index for test set
+test_set_index_h <- which(component_SLA >= cutoff)
+#index for trainig set
+training_set_index_h <- which(component_SLA < cutoff)
+#split the scaled data accordingly
+X_train_e_h <- X_scaled[training_set_index_h, ]
+Y_train_e_h <- Y_scaled[training_set_index_h]
+X_test_e_h <- X_scaled[test_set_index_h, ]
+Y_test_e_h <- Y_scaled[test_set_index_h]
+
+train_control <- trainControl(method = "cv", number = 20)
+train_data_e_h <- data.frame(SLA = Y_train_e_h, X_train_e_h)
+#fit the model 
+start_time_pls_e_h <- Sys.time()
+pls_model_e_h <- train(SLA ~ ., data = train_data_e_h, method = "pls", tuneLength = 20, trControl = train_control)
+end_time_pls_e_h <- Sys.time()
+
+rmse_values_e_h <- pls_model_e_h$results$RMSE
+# Find the index of the minimum RMSE
+optimal_components_e_h <- pls_model_e_h$results$ncomp[which.min(rmse_values_e_h)]
+
+#Predictions 
+colnames(X_test_e_h) <- paste0("X", colnames(X_test_e_h))
+predictions_e_h <- predict(pls_model_e_h, ncomp = optimal_components_e_h, newdata = X_test_e_h)
+
+results_pls_e_h <- postResample(predictions_e_h, Y_test_e_h)
+results_pls_e_h
+```
+
+
+```{r}
+#ggplot
+pls_df_e_h <- data.frame(Actual_SLA = Y_test_e_h, Predicted_SLA = predictions_e_h)
+
+p_e_h <- ggplot(pls_df_e_h, aes(x = Actual_SLA, y = Predicted_SLA)) +
+        geom_point(color = "#2ca25f", alpha = 0.7) +
+        geom_abline(slope = 1, intercept = 0, color = "#8856a7", linetype = "dashed") +
+        labs( title = "PLS Extrapolation for predicting high SLA values", x = "Actual SLA", y = "Predicted SLA") +
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5)) 
+
+ggplotly(p_e_h)
+
+
+```
+
+#### Extrapolation on Lowest range
+
+######### Extrapolation by using the lowest 30% ##############
+
+```{r echo=T, results="hide"}
+# Set seed
+set.seed(0)
+
+# Define the cutoff
+cutoff_low <- quantile(component_SLA, 0.3, na.rm = TRUE)
+#index for test set
+test_set_index_l <- which(component_SLA <= cutoff_low)
+#index for trainig set
+training_set_index_l <- which(component_SLA > cutoff_low)
+#split the scaled data accordingly
+X_train_e_l <- X_scaled[training_set_index_l, ]
+Y_train_e_l <- Y_scaled[training_set_index_l]
+X_test_e_l <- X_scaled[test_set_index_l, ]
+Y_test_e_l <- Y_scaled[test_set_index_l]
+
+train_control <- trainControl(method = "cv", number = 20)
+train_data_e_l <- data.frame(SLA = Y_train_e_l, X_train_e_l)
+# Fit the model 
+start_time_pls_e_l <- Sys.time()
+pls_model_e_l <- train(SLA ~ ., data = train_data_e_l, method = "pls", tuneLength = 20, trControl = train_control)
+end_time_pls_e_l <- Sys.time()
+
+# Predictions on lowest
+
+rmse_values_e_l <- pls_model_e_l$results$RMSE
+# Find the index of the minimum RMSE
+optimal_components_e_l <- pls_model_e_l$results$ncomp[which.min(rmse_values_e_l)]
+
+colnames(X_test_e_l) <- paste0("X", colnames(X_test_e_l))
+
+# Predict using the model
+predictions_e_l <- predict(pls_model_e_l, ncomp = optimal_components_e_l, newdata = X_test_e_l)
+
+results_pls_e_l <- postResample(predictions_e_l, Y_test_e_l)
+results_pls_e_l
+```
+
+
+```{r }
+#ggplot
+pls_df_e_l <- data.frame(Actual_SLA = Y_test_e_l, Predicted_SLA = predictions_e_l)
+
+p_e_l <- ggplot(pls_df_e_l, aes(x = Actual_SLA, y = Predicted_SLA)) +
+        geom_point(color = "#2ca25f", alpha = 0.7) +
+        geom_abline(slope = 1, intercept = 0, color = "#8856a7", linetype = "dashed") +
+        labs( title = "PLS Extrapolation for predicting low SLA values", x = "Actual SLA", y = "Predicted SLA") +
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5)) 
+
+ggplotly(p_e_l)
+
+```
+
+### Variable importance in PLSR
+
+#### Variable importance of SLA
+```{r echo=T, results="hide"}
+#Variable importance of SLA in PLSR
+vi_sla <- varImp(pls_model, scale = F)
+
+vi_sla_df <- as.data.frame(vi_sla$importance)
+
+wavelengths <- seq(350, 2500)
+
+# Create a data frame for plotting
+vi_sla_df <- data.frame(Wavelength = wavelengths, Overall = vi_sla_df)
+
+
+v_sla <- ggplot(vi_sla_df, aes(x = Wavelength, y = Overall)) +
+  geom_line(color = "red") + 
+  geom_point(color = "#69b3a2") +
+  labs(title = "Variable Importance of SLA (PLSR)", x = "Wavelength (nm)", y = "Variable Importance") +
+  theme_minimal()
+# v_sla
+```
+
+
+```{r }
+# create ggplot
+ggplotly(v_sla)
+
+```
+
+
+#### Variable importance of Carbon content
+```{r echo=T, results="hide"}
+#Variable importance of Carbon content in PLSR
+vi_c <- varImp(results_c, scale = F)
+
+vi_c_df <- as.data.frame(vi_c$importance)
+
+wavelengths <- seq(350, 2500)
+
+# Create a data frame for plotting
+vi_c_df <- data.frame(Wavelength = wavelengths, Overall = vi_c_df)
+
+
+v_c <- ggplot(vi_c_df, aes(x = Wavelength, y = Overall)) +
+  geom_line(color = "red") + 
+  geom_point(color = "#69b3a2") +
+  labs(title = "Variable Importance of Carbon content (PLSR)", x = "Wavelength (nm)", y = "Variable Importance") +
+  theme_minimal()
+# v_c
+```
+
+
+```{r}
+#create ggplot
+ggplotly(v_c)
+
+```
+
+
+
+
+# Random Forest (RF)
+
+### Specific Leaf Area (SLA)
+```{r echo=TRUE, results='hide'}
+# Remove outliers and prepare data (same as before)
+
+plantspec.data[which(is.na(plantspec.data$SLA)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$SLA)),]
+plantspec.data.sla <- plantspec.data[!is.na(plantspec.data$SLA),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.sla <- subset(plantspec.data.sla, Tree != "70_Ti3")
+
+# Standard Normal Variate (SNV) Transformation
+SNV <- function(spectra){
+  spectra <- as.matrix(spectra)
+  spectrat <- t(spectra)
+  spectrat_snv <- scale(spectrat, center = TRUE, scale = TRUE)
+  spectra_snv <- t(spectrat_snv)
+  return(spectra_snv)
+}
+input <- as.matrix(SNV(input))
+
+# Scale the trait
+component_SLA <- plantspec.data.sla$SLA
+component_SLA_scaled <- scale(component_SLA)
+
+# Split data into training and testing sets
+set.seed(0)
+training_set <- !(subdivideDataset(spectra = input,
+                                   component = component_SLA,
+                                   method = "PCAKS", p = 0.3,
+                                   type = "validation"))
+
+# training_set_logical <- rep(FALSE, length(component_SLA))
+# training_set_logical[training_set] <- TRUE
+
+X_train <- input[training_set, ]
+Y_train <- component_SLA_scaled[training_set]
+X_test <- input[!training_set, ]
+Y_test <- component_SLA_scaled[!training_set]
+
+# Prepare training data
+train_data <- data.frame(SLA = Y_train, X_train)
+
+# Training the model
+start_time_rf <- Sys.time()
+rf_model_sla <- train(SLA ~ ., data = train_data, method = "rf", ntree = 500)
+end_time_rf <- Sys.time()
+
+training_time_rf <- end_time_rf - start_time_rf
+print(training_time_rf)
+
+# Summary of the model
+summary(rf_model_sla)
+
+
+colnames(X_test) <- paste0("X", colnames(X_test))
+# Predictions
+predictions_rf <- predict(rf_model_sla, newdata = X_test)
+
+# Evaluation metrics
+results_rf <- postResample(predictions_rf, Y_test)
+R_squared_rf <- results_rf[["Rsquared"]]
+rmse_values_rf <- results_rf[["RMSE"]]
+
+# Print results
+print(paste("R² (RF):", R_squared_rf))
+print(paste("RMSE (RF):", rmse_values_rf))
+
+
+```
+
+
+
+
+#### ggplot of SLA prediction RF
+```{r }
+#ggplot
+# Convert Y_test and predictions to numeric 
+Y_test <- as.numeric(Y_test)
+predictions_rf <- as.numeric(predictions_rf)
+
+# Create a data frame with Actual and Predicted values
+pred_df <- data.frame(
+  Actual = Y_test,
+  Predicted = predictions_rf
+)
+
+
+p_sla <- ggplot(pred_df, aes(x = Actual , y = Predicted)) +
+        geom_point(color = "#f03b20", alpha = 0.7) +
+        geom_abline(slope = 1, intercept = 0, color = "#756bb1", linetype = "dashed") +
+        labs( title = "Predicted Vs Actual SLA (RF)", x = "Actual SLA", y = "Predicted SLA") +
+        theme_minimal() 
+        
+
+ggplotly(p_sla)
+
+```
+
+
+
+
+```{r echo=TRUE, results='hide'}
+
+```
+
+
+### Leaf Dry Matter Content (LDMC)
+
+```{r echo=TRUE, results='hide'}
+
+# Removing the outlayers
+plantspec.data[which(is.na(plantspec.data$LDMC)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$LDMC)),]
+plantspec.data.ldmc <- plantspec.data[!is.na(plantspec.data$LDMC),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.ldmc <- subset(plantspec.data.ldmc, Tree != "70_Ti3")
+
+#input SNV trasformed
+input <- as.matrix(SNV(input))
+# Scale the trait
+component_LDMC <- plantspec.data.ldmc$LDMC
+component_LDMC_scaled <- scale(component_LDMC)
+
+# Split data into training and testing sets
+set.seed(0)
+
+training_set <- !(subdivideDataset(spectra = input,
+                                   component = component_LDMC,
+                                   method = "PCAKS", p = 0.3,
+                                   type = "validation"))
+
+training_set_logical <- rep(FALSE, length(component_LDMC))
+training_set_logical[training_set] <- TRUE
+
+X_train <- input[training_set_logical, ]
+Y_train <- component_LDMC_scaled[training_set_logical]
+X_test <- input[!training_set_logical, ]
+Y_test <- component_LDMC_scaled[!training_set_logical]
+
+# Prepare training data
+train_data <- data.frame(LDMC = Y_train, X_train)
+
+
+start_time_rf <- Sys.time()
+rf_model_ldmc <- train(LDMC ~ ., data = train_data, method = "rf", ntree = 500, importance =TRUE)
+end_time_rf <- Sys.time()
+
+training_time_rf <- end_time_rf - start_time_rf
+print(training_time_rf)
+
+# Summary of the model
+summary(rf_model_ldmc)
+
+
+colnames(X_test) <- paste0("X", colnames(X_test))
+# Predictions
+predictions_rf <- predict(rf_model_ldmc, newdata = X_test)
+
+# Evaluation metrics
+results_rf <- postResample(predictions_rf, Y_test)
+R_squared_rf <- results_rf[["Rsquared"]]
+rmse_values_rf <- results_rf[["RMSE"]]
+
+# Print results
+print(paste("R² (RF):", R_squared_rf))
+print(paste("RMSE (RF):", rmse_values_rf))
+print(training_time_rf)
+
+```
+
+#### ggplot of LDMC prediction
+```{r}
+plot_rf_ldmc <- plot_gg(predictions_rf, Y_test,
+                     title = "Predicted Vs Actual LDMC (RF)",
+                     x_label = "Actual LDMC",
+                     y_label = "Predicted LDMC",
+                     point_color = "#31a354",
+                     line_color = "#e34a33")
+ggplotly(plot_rf_ldmc)
+
+```
+
+### Carbon to Nitrogen ratio (C:N)
+```{r echo=TRUE, results='hide'}
+# Removing the outlayers
+plantspec.data[which(is.na(plantspec.data$CN)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$CN)),]
+plantspec.data.cn <- plantspec.data[!is.na(plantspec.data$CN),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.cn <- subset(plantspec.data.cn, Tree != "70_Ti3")
+
+
+#input SNV trasformed
+input <- as.matrix(SNV(input))
+# Scale the trait
+component_CN <- plantspec.data.cn$CN
+component_CN_scaled <- scale(component_CN)
+
+# Split data into training and testing sets
+set.seed(0)
+# training_set <- createDataPartition(component_SLA, p = 0.7, list = FALSE)
+
+training_set <- !(subdivideDataset(spectra = input,
+                                   component = component_CN,
+                                   method = "PCAKS", p = 0.3,
+                                   type = "validation"))
+
+training_set_logical <- rep(FALSE, length(component_CN))
+training_set_logical[training_set] <- TRUE
+
+X_train <- input[training_set_logical, ]
+Y_train <- component_CN_scaled[training_set_logical]
+X_test <- input[!training_set_logical, ]
+Y_test <- component_CN_scaled[!training_set_logical]
+
+# Prepare training data
+train_data <- data.frame(CN = Y_train, X_train)
+
+
+start_time_rf <- Sys.time()
+rf_model_cn <- train(CN ~ ., data = train_data, method = "rf", ntree = 500, importance =TRUE)
+end_time_rf <- Sys.time()
+
+training_time_rf <- end_time_rf - start_time_rf
+print(training_time_rf)
+
+# Summary of the model
+summary(rf_model_cn)
+
+
+colnames(X_test) <- paste0("X", colnames(X_test))
+# Predictions
+predictions_rf_cn <- predict(rf_model_cn, newdata = X_test)
+
+# Evaluation metrics
+results_rf <- postResample(predictions_rf_cn, Y_test)
+R_squared_rf_cn <- results_rf[["Rsquared"]]
+rmse_values_rf_cn <- results_rf[["RMSE"]]
+
+# Print results
+print(paste("R² (RF):", R_squared_rf_cn))
+print(paste("RMSE (RF):", rmse_values_rf_cn))
+print(training_time_rf)
+
+
+
+```
+
+#### ggplot of CN prediction
+```{r }
+plot_rf_cn <- plot_gg(predictions_rf_cn, Y_test,
+                     title = "Predicted Vs Actual CN (RF)",
+                     x_label = "Actual CN",
+                     y_label = "Predicted CN",
+                     point_color = "#c51b8a",
+                     line_color = "#e34a33")
+ggplotly(plot_rf_cn)
+
+```
+
+
+### Carbon content
+```{r echo=T, results="hide"}
+# Removing the outlayers
+plantspec.data[which(is.na(plantspec.data$C)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$C)),]
+plantspec.data.c <- plantspec.data[!is.na(plantspec.data$C),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.c <- subset(plantspec.data.c, Tree != "70_Ti3")
+
+
+#input SNV trasformed
+input <- as.matrix(SNV(input))
+# Scale the trait
+component_C <- plantspec.data.c$C
+component_C_scaled <- scale(component_C)
+
+# Split data into training and testing sets
+set.seed(0)
+
+training_set <- !(subdivideDataset(spectra = input,
+                                   component = component_C,
+                                   method = "PCAKS", p = 0.3,
+                                   type = "validation"))
+
+training_set_logical <- rep(FALSE, length(component_C))
+training_set_logical[training_set] <- TRUE
+
+X_train <- input[training_set_logical, ]
+Y_train <- component_C_scaled[training_set_logical]
+X_test <- input[!training_set_logical, ]
+Y_test <- component_C_scaled[!training_set_logical]
+
+# Prepare training data
+train_data <- data.frame(C = Y_train, X_train)
+
+
+start_time_rf <- Sys.time()
+rf_model_c <- train(C ~ ., data = train_data, method = "rf", ntree = 500, importance =TRUE)
+end_time_rf <- Sys.time()
+
+training_time_rf <- end_time_rf - start_time_rf
+print(training_time_rf)
+
+# Summary of the model
+summary(rf_model_c)
+
+
+colnames(X_test) <- paste0("X", colnames(X_test))
+# Predictions
+predictions_rf_c <- predict(rf_model_c, newdata = X_test)
+
+# Evaluation metrics
+results_rf <- postResample(predictions_rf_c, Y_test)
+R_squared_rf_c <- results_rf[["Rsquared"]]
+rmse_values_rf_c <- results_rf[["RMSE"]]
+
+# Print results
+print(paste("R² (RF):", R_squared_rf_c))
+print(paste("RMSE (RF):", rmse_values_rf_c))
+print(training_time_rf)
+
+
+```
+
+#### ggplot of Carbon content prediction
+```{r}
+plot_c <- plot_gg(predictions_rf_c, Y_test,
+                     title = "Predicted Vs Actual C (RF)",
+                     x_label = "Actual C",
+                     y_label = "Predicted C",
+                     point_color = "#756bb1",
+                     line_color = "#e34a33")
+ggplotly(plot_c)
+
+```
+
+### Phosphorus Content (P)
+```{r echo=T, results="hide"}
+# Removing the outlayers
+
+plantspec.spectra2 <- read_excel("/Users/methungeorge/Desktop/IPB/pablo/dataset_20231010.xlsx", sheet = "Kreinitz set spectra") # Spectral Kreinitz set
+plantspec.data2 <- read_excel("/Users/methungeorge/Desktop/IPB/pablo/dataset_20231010.xlsx", sheet = "Kreinitz set traits") # Traits Kreinitz set
+
+cbind(plantspec.spectra2$Spectral.file.name, plantspec.data2$Level_ID) # Checking correlation between both sets
+
+# Removing outlayer from the samples
+plantspec.data[which(is.na(plantspec.data$P)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$P)),]
+plantspec.data.p <- plantspec.data[!is.na(plantspec.data$P),]
+input <- input[-which(plantspec.data.p$Tree == "75_So2"),]
+plantspec.data.p <- subset(plantspec.data.p, Tree != "75_So2")
+input <- input[-which(plantspec.data.p$Tree == "16_Be3"),]
+plantspec.data.p <- subset(plantspec.data.p, Tree != "16_Be3")
+input <- input[-which(plantspec.data.p$Tree == "71_Fa3"),]
+plantspec.data.p <- subset(plantspec.data.p, Tree != "71_Fa3")
+
+
+plantspec.data[which(is.na(plantspec.data2$P)),]
+
+input2 <- as.matrix(plantspec.spectra2[, -1])
+input2 <- input2[-which(plantspec.data2$Level_ID == "B16_Li17_3"),]
+plantspec.data2 <- subset(plantspec.data2, Level_ID != "B16_Li17_3")
+input2 <- input2[-which(plantspec.data2$Level_ID == "B41_Es11_3"),]
+plantspec.data2 <- subset(plantspec.data2, Level_ID != "B41_Es11_3")
+
+# Studying the distribution of the values for P
+component_P <- c(plantspec.data.p$P, plantspec.data2$P)
+component_P <- as.numeric(component_P)
+component_P_scaled <- scale(component_P)
+
+input <- data.frame(rbind(input, input2))
+input <- as.matrix(SNV(input))
+
+# Split data into training and testing sets
+set.seed(0)
+
+training_set <- !(subdivideDataset(spectra = input,
+                                   component = component_P,
+                                   method = "PCAKS", p = 0.3,
+                                   type = "validation"))
+
+training_set_logical <- rep(FALSE, length(component_P))
+training_set_logical[training_set] <- TRUE
+
+X_train <- input[training_set_logical, ]
+Y_train <- component_P_scaled[training_set_logical]
+X_test <- input[!training_set_logical, ]
+Y_test <- component_P_scaled[!training_set_logical]
+
+# Prepare training data
+train_data <- data.frame(P = Y_train, X_train)
+
+
+start_time_rf <- Sys.time()
+rf_model_p <- train(P ~ ., data = train_data, method = "rf", ntree = 500, importance =TRUE)
+end_time_rf <- Sys.time()
+
+training_time_rf <- end_time_rf - start_time_rf
+print(training_time_rf)
+
+# Summary of the model
+summary(rf_model_p)
+
+
+# colnames(X_test) <- paste0("X", colnames(X_test))
+
+# Predictions
+predictions_rf_p <- predict(rf_model_p, newdata = X_test)
+
+# Evaluation metrics
+results_rf <- postResample(predictions_rf_p, Y_test)
+R_squared_rf_p <- results_rf[["Rsquared"]]
+rmse_values_rf_p <- results_rf[["RMSE"]]
+
+# Print results
+print(paste("R² (RF):", R_squared_rf_p))
+print(paste("RMSE (RF):", rmse_values_rf_p))
+print(training_time_rf)
+
+
+```
+
+#### ggplot of Phosphorus content prediction
+```{r }
+
+plot_p <- plot_gg(predictions_rf_p, Y_test,
+                     title = "Predicted Vs Actual P (RF)",
+                     x_label = "Actual P",
+                     y_label = "Predicted P",
+                     point_color = "#636363",
+                     line_color = "#e34a33")
+ggplotly(plot_p)
+
+```
+
+
+
+### Extrapolation study on RF
+
+In this study, an extrapolation approach was applied to evaluate the performance of Random Forest (RF) under extreme conditions. For both high and low data ranges, a specific data splitting strategy was employed. In the highest range, 70% of the data was used for training, while the top 30% of values within this subset were reserved for testing. A similar approach was applied to the lowest data range, where the bottom 30% of values were selected for testing, with the remaining data used for training. This methodology allows for assessing the model’s ability to predict beyond the range of observed values, providing insights into its extrapolation capabilities.
+
+#### Extrapolation on Highest range
+
+######### Extrapolation by using the highest 30% ##############
+
+```{r echo=T, results="hide"}
+# Removing outlayer from the samples
+plantspec.data[which(is.na(plantspec.data$SLA)),]
+input <- as.matrix(plantspec.spectra[, -1])
+input <- input[-which(is.na(plantspec.data$SLA)),]
+plantspec.data.sla <- plantspec.data[!is.na(plantspec.data$SLA),]
+input <- input[-which(plantspec.data$Tree == "70_Ti3"),]
+plantspec.data.sla <- subset(plantspec.data.sla, Tree != "70_Ti3")
+
+# Studying the distribution of the values for SLA
+component_SLA <- plantspec.data.sla$SLA
+
+#we manually select the extreme values from both sides
+X <- input  
+Y <- plantspec.data.sla$SLA  
+
+# Scale the input (spectral data) and SLA values for better model
+X_scaled <- scale(X)            
+Y_scaled <- scale(Y)
+
+set.seed(0)
+
+#Highest 30% of Values
+cutoff <- quantile(component_SLA, 0.7, na.rm = TRUE)
+#index for test set
+test_set_index_h <- which(component_SLA >= cutoff)
+#index for trainig set
+training_set_index_h <- which(component_SLA < cutoff)
+#split the scaled data accordingly
+X_train_e_h <- X_scaled[training_set_index_h, ]
+Y_train_e_h <- Y_scaled[training_set_index_h]
+X_test_e_h <- X_scaled[test_set_index_h, ]
+Y_test_e_h <- Y_scaled[test_set_index_h]
+# 
+# train_control <- trainControl(method = "cv", number = 20)
+train_data_e_h <- data.frame(SLA = Y_train_e_h, X_train_e_h)
+#fit the model 
+start_time_rf_e_h <- Sys.time()
+rf_model_e_h <- train(SLA ~ ., data = train_data_e_h, method = "rf", ntree = 500)
+end_time_rf_e_h <- Sys.time()
+
+
+rmse_values_e_h <- rf_model_e_h$results$RMSE
+# Find the index of the minimum RMSE
+optimal_components_e_h <- rf_model_e_h$results$ncomp[which.min(rmse_values_e_h)]
+
+#Predictions 
+colnames(X_test_e_h) <- paste0("X", colnames(X_test_e_h))
+predictions_e_h <- predict(rf_model_e_h, ncomp = optimal_components_e_h, newdata = X_test_e_h)
+
+results_rf_e_h <- postResample(predictions_e_h, Y_test_e_h)
+results_rf_e_h
+```
+
+
+```{r}
+#ggplot
+rf_df_e_h <- data.frame(Actual_SLA = Y_test_e_h, Predicted_SLA = predictions_e_h)
+
+p_e_h_rf <- ggplot(rf_df_e_h, aes(x = Actual_SLA, y = Predicted_SLA)) +
+        geom_point(color = "#2ca25f", alpha = 0.7) +
+        geom_abline(slope = 1, intercept = 0, color = "#8856a7", linetype = "dashed") +
+        labs( title = "RF Extrapolation for predicting high SLA values", x = "Actual SLA", y = "Predicted SLA") +
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5)) 
+
+ggplotly(p_e_h_rf)
+
+```
+
+
+#### Extrapolation on Lowest range
+
+######### Extrapolation by using the lowest 30% ##############
+
+```{r echo=T, results="hide"}
+
+set.seed(0)
+
+cutoff_low <- quantile(component_SLA, 0.3, na.rm = TRUE)
+#index for test set
+test_set_index_l <- which(component_SLA <= cutoff_low)
+#index for trainig set
+training_set_index_l <- which(component_SLA > cutoff_low)
+#split the scaled data accordingly
+X_train_e_l <- X_scaled[training_set_index_l, ]
+Y_train_e_l <- Y_scaled[training_set_index_l]
+X_test_e_l <- X_scaled[test_set_index_l, ]
+Y_test_e_l <- Y_scaled[test_set_index_l]
+
+train_control <- trainControl(method = "cv", number = 10)
+train_data_e_l <- data.frame(SLA = Y_train_e_l, X_train_e_l)
+#fit the model 
+start_time_rf_e_l <- Sys.time()
+rf_model_e_l <- train(SLA ~ ., data = train_data_e_l, method = "rf", ntree = 500)
+end_time_rf_e_l <- Sys.time()
+
+#Predictions on lowest
+
+rmse_values_e_l <- rf_model_e_l$results$RMSE
+# Find the index of the minimum RMSE
+optimal_components_e_l <- rf_model_e_l$results$ncomp[which.min(rmse_values_e_l)]
+
+colnames(X_test_e_l) <- paste0("X", colnames(X_test_e_l))
+predictions_e_l <- predict(rf_model_e_l, ncomp = optimal_components_e_l, newdata = X_test_e_l)
+
+results_rf_e_l <- postResample(predictions_e_l, Y_test_e_l)
+results_rf_e_l
+```
+
+
+```{r }
+#ggplot
+rf_df_e_l <- data.frame(Actual_SLA = Y_test_e_l, Predicted_SLA = predictions_e_l)
+
+p_e_l_rf <- ggplot(rf_df_e_l, aes(x = Actual_SLA, y = Predicted_SLA)) +
+        geom_point(color = "#2ca25f", alpha = 0.7) +
+        geom_abline(slope = 1, intercept = 0, color = "#8856a7", linetype = "dashed") +
+        labs( title = "RF Extrapolation for predicting low SLA values", x = "Actual SLA", y = "Predicted SLA") +
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5)) 
+
+ggplotly(p_e_l_rf)
+
+```
+
+
+### Variable importance in RF
+
+#### Variable importance of SLA
+```{r echo=T, results="hide"}
+#Variable importance of SLA in RF
+vi_sla_rf <- varImp(rf_model_sla, scale = F)
+
+vi_sla_rf_df <- as.data.frame(vi_sla_rf$importance)
+
+wavelengths <- seq(350, 2500)
+
+# Create a data frame for plotting
+vi_sla_rf_df <- data.frame(Wavelength = wavelengths, Overall = vi_sla_rf_df)
+
+
+v_sla_rf <- ggplot(vi_sla_rf_df, aes(x = Wavelength, y = Overall)) +
+  geom_line(color = "red") + 
+  geom_point(color = "#69b3a2") +
+  labs(title = "Variable Importance of SLA (RF)", x = "Wavelength (nm)", y = "Variable Importance") +
+  theme_minimal()
+```
+
+
+
+```{r}
+
+
+
+
+```
+
+
+
+
+
+```{r }
+# ggplot
+ggplotly(v_sla_rf)
+
+```
+
+#### Variable importance of C
+```{r echo=T, results="hide"}
+#Variable importance of Carbon content in RF
+vi_c_rf <- varImp(rf_model_c, scale = F)
+
+vi_c_rf_df <- as.data.frame(vi_c_rf$importance)
+
+wavelengths <- seq(350, 2500)
+
+# Create a data frame for plotting
+vi_c_rf_df <- data.frame(Wavelength = wavelengths, Overall = vi_c_rf_df)
+
+
+v_c_rf <- ggplot(vi_c_rf_df, aes(x = Wavelength, y = Overall)) +
+  geom_line(color = "red") + 
+  geom_point(color = "#69b3a2") +
+  labs(title = "Variable Importance of Carbon content (RF)", x = "Wavelength (nm)", y = "Variable Importance") +
+  theme_minimal()
+```
+
+
+```{r}
+# ggplot
+ggplotly(v_c_rf)
+
+v_c_rf
+
+```
+
+### PLSR and RF Model Performance Comparison
+
+
+#### Comparing R square and training time
+
+```{r}
+library(plotly)
+library(viridis)
+
+# Create the data frame
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)"),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7)), levels = c("PLSR", "RF")), 
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08),
+  Training_Time <- c(13.76, 11.40, 15.71, 13.63, 15.19, 14.18, 12.91, 12.85*60, 12.11*60, 12.60*60, 13.17*60, 15.25*60, 11.78*60, 11.98*60)
+)
+
+
+# Convert Model to numeric 
+data$Model_Numeric <- as.numeric(factor(data$Model))
+
+# Model names for y-axis labels
+model_names <- levels(factor(data$Model))
+
+# Create the 3D scatter plot
+plot_ly(data,
+        x = ~Trait,
+        y = ~Model_Numeric,
+        z = ~R2,
+        color = ~Training_Time, # Color by Training Time
+        type = 'scatter3d',
+        hoverinfo = "text",
+        text = ~paste("Trait: ", Trait, "\nModel: ", Model, "\nR2: ", R2, "\nTraining Time: ", Training_Time),
+        marker = list(
+          symbol = 'circle',
+          line = list(width = 0)
+        ),
+        colors = viridis(100),  # Use viridis for Training Time
+        colorbar = list(title = "Training Time (seconds)") # Colorbar for training time
+) %>%
+  layout(title = "3D Scatter Plot (RF & PLSR)",
+         scene = list(
+           xaxis = list(title = "Trait"),
+           yaxis = list(title = "Model",
+                        tickvals = 1:length(model_names),
+                        ticktext = model_names),
+           zaxis = list(title = "R-squared"),
+           bgcolor = "#e6e6fa",
+           grid = list(color = "rgb(50,50,50)"),
+           camera = list(eye = list(x = 1.5, y = 1.5, z = 0.6))
+         ),
+         font = list(color = "black")
+  )
+   
+```
+
+
+#### Comparison of R-square values 
+
+```{r}
+# Visualization of the results using Heatmap
+
+# Required libraries
+library(ggplot2)
+library(reshape2)
+
+# Create a data frame with R^2 values
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)"),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7)), levels = c("PLSR", "RF")),
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08)
+)
+
+
+
+data_melted <- melt(data, id.vars = c("Trait", "Model", "Type"), measure.vars = "R2", value.name = "R2")
+
+e1 <- ggplot(data_melted, aes(x = Model, y = Trait, fill = R2)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "darkblue") + # Adjust colors as needed
+  labs(title = "R-squared Values (PLSR and RF Only)", x = "Model", y = "Trait", fill = "R-squared") +
+  theme_bw() +  # Clean theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotate x-axis labels if needed
+  facet_wrap(~Type, scales = "free_y") # Separate training and extrapolation
+
+e1
+```
+
+### Comparing R-square and RMSE
+
+```{r}
+# Required libraries
+library(ggplot2)
+library(reshape2)
+
+# Create a data frame 
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)"),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7)), levels = c("PLSR", "RF")),
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08),
+  RMSE = c(0.40, 0.41, 0.50, 0.55, 0.64, 1.02, 0.41, 0.42, 0.72, 0.63, 0.82, 0.66, 1.29, 0.74)
+)
+
+e2 <- ggplot(data, aes(x = RMSE, y = R2, color = Model, shape = Type)) +
+  geom_point(size = 3) +
+  labs(title = "R-squared vs. RMSE", x = "RMSE", y = "R-squared", color = "Model", shape = "Type") +
+  scale_color_manual(values = c("darkblue", "darkgreen")) +
+  theme_bw()
+
+ggplotly(e2)
+```
+
+
+
+
+
+
+
