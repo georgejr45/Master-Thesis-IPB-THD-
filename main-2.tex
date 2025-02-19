@@ -155,6 +155,8 @@ The abstract of this thesis is..................................
     RT \> Retention Time \\
     MAE \> Mean Absolute Error \\
     API \> Application Programming Interface \\
+    HPC \> High Performance Computing \\
+    SGE \> Sun Grid Engine \\
     
 \end{tabbing}
 
@@ -502,7 +504,7 @@ It is categorized into supervised learning, for classification and regression ta
 optimization algorithm which combines the benefits of two SGD variants: Adaptive Gradient Algorithm (AdaGrad) and Root Mean Square Propagation (RMSProp) [34]. It requires minimal memory and dynamically adjusts the learning rate for each parameter, making it more computationally efficient [34]. In this project CNN is employed to predict the output values from NIRS data. \\
 
 
-\subsection*{Root mean square error (RMSE)}
+\section{Root mean square error (RMSE)}
 Root mean square error (RMSE) is a used as another metric for evaluating the performance of regression models in machine learning. The RMSE measures the average magnitude of prediction error [53]. Two important error metrics used in ML are: \\
 
 \begin{itemize}
@@ -548,7 +550,7 @@ Worst case: $RMSE \to +\infty$ \\
 The main difference between MSE and RMSE is that MSE squares the error, giving more weight to larger errors and making it more sensitive to outliers. The units used to represent MSE values are squared. RMSE is the square root of MSE, converting the units back to the original scale. This makes it easier to interpret since it has the same unit as the target variable. RMSE is also used as a metric to evaluate the model's performance in this project.
 
 
-\subsection*{Coefficient of Determination ($R^2$)}
+\section{Coefficient of Determination ($R^2$)}
 It is a statistical measure to indicate a regression model's good fit. The $R^2$ provides information on how well the observed outcomes are replicated by the statistical model. $R^2$ value ranges from $0$ to $1$, in which $1$ indicates a perfect fit. In machine learning, the $R^2$ value of $1$ indicates that the predicted value by the ML model and the actual or measured value are the same [52,53]. It is calculated by: \\
 
 The calculation of $R^2$ in the context of this study can be explained as follows: \\
@@ -1189,7 +1191,7 @@ ggplotly(plot_ldmc)
 \end{lstlisting}
 
 \subsubsection*{Prediction of C content and C to N ratio (C:N)}
-The prediction of Carbon content and Carbon to Nitrogen ratio follows similar steps as the LDMC prediction. The only difference is in the preprocessing steps, in which each trait filter out columns relevant to that specific analysis. It uses the advantage of the helper function to execute the long scripts. The results from each of these analysis were carefully studied and saved. The plots were created and is available in the supplementary vignette as interactive plots. The results are provided in the final chapter of this thesis.
+The prediction of Carbon content and Carbon to Nitrogen ratio follows similar steps as the LDMC prediction. The only difference is in the preprocessing steps, in which each trait filter out columns relevant to that specific analysis. It uses the advantage of the helper function to execute the long scripts. The results from each of these analysis were carefully studied and saved. The plots were created and is available in the supplementary vignette as interactive plots (\url{https://github.com/georgejr45/Master-Thesis-IPB-THD-/blob/main/Vignette/Predict_traits_from_NIRS.html}). The results are provided in the final chapter of this thesis.
 
 \subsubsection*{Prediction of Phosphorus content using PLSR}
 The analysis of phosphorus content involved additional steps compared to the analysis of other traits. It used additional data from Kreinitz experiment [49] along with data from leaf trait study [15]. This is due to the loss of data from a technical error occurred during the laboratory analysis of Phosphorus content. The data is chosen considering the comparability of the samples, instruments and method used [15]. \\
@@ -1233,7 +1235,213 @@ component_P <- c(plantspec.data.p$P, plantspec.data2$P)
 
 After preprocessing, the analysis followed steps similar to the LDMC, C and C:N. It used the helper functions to create the model and visualize the data. 
 
-\subsection{Extrapolation study of PLSR}
+
+
+\subsection{Trait Prediction Using Random Forest}
+Random Forest(RF), a nonlinear approach, was also chosen to evaluate predictive ability and model performance. Instead of classification, regression was performed using Random Forest. The data used is the same for the previous PLSR analysis. The aim is to evaluate and compare the results of RF with PLSR and CNN. The analysis does not require any additional libraries, since it follows a uniform approach and only differs in the method used for training. It uses the \texttt{plantspec} package for data splitting and \texttt{caret} package for training model and predicting the results. The visualization is done with the use of \texttt{ggplot2} and \texttt{plotly} packages. All five traits were predicted and the results were recorded for comparison.\\
+
+\subsubsection*{Data Loading, Preprocessing, Scaling, and Splitting}
+The steps for data loading, preprocessing, scaling and splitting follows the same approach as described for SLA prediction using PLSR. The main differences begin in the next step with model training for Random Forest
+
+
+\subsubsection*{Model Training}
+The \texttt{train} function from \texttt{caret} package is employed to create the RF model for predicting SLA trait. Compared to the PLSR model, the method used here is "rf" (Random Forest) instead of "pls" (Partial Least Squares Regression). Additionally, the RF model excludes certain parameters that were present in the PLSR model. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# Training the model
+start_time_rf <- Sys.time()
+rf_model_sla <- train(SLA ~ ., data = train_data, method = "rf", ntree = 500)
+end_time_rf <- Sys.time()
+\end{lstlisting}
+
+\begin{itemize}
+    \item method: "rf" specifies the model being trained here is Random Forest
+    \item ntree: It is set to $500$ to improve accuracy and is set constant for every trait being analyzed by RF model.
+\end{itemize}
+
+The time for training the model was recorded for comparing the training time of each model from different ML approaches. In this analysis the \texttt{ntree} is set to $500$, it is the number of decision trees which will be used to built the RF model. The number of trees can be tuned for each data but we have used $500$ since, It is considered as a default value in many analysis. \\
+
+\subsubsection*{Model Evaluation}
+The performance of the model was evaluated using the test dataset. For predicting the SLA values, \texttt{predict} function from the \texttt{caret} package was used. In addition to that, \texttt{postResample} function from \texttt{caret} package is used to get the $R^2$ and RMSE values for comparison.\\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# Predictions
+predictions_rf <- predict(rf_model_sla, newdata = X_test)
+
+# Evaluation metrics
+results_rf <- postResample(predictions_rf, Y_test)
+R_squared_rf <- results_rf[["Rsquared"]]
+rmse_values_rf <- results_rf[["RMSE"]]
+\end{lstlisting}
+
+\subsubsection*{Visualization}
+The \texttt{ggplot2} and \texttt{plotly} packages are employed for better visualization of the data. A dataframe with the test trait data (X\_test) and predicted trait values were created and passed on to the \texttt{ggplot} function to create the graph (Figure \ref{fig:sla_rf}).\\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/sla_rf.png}
+    \caption{The scatter plot created using ggplot2 package, illustrating the predicted and actual SLA values of random forest model}
+    \label{fig:sla_rf}
+\end{figure}
+
+\subsubsection*{Prediction of LDMC, C:N ratio, C and P content}
+The analysis of the rest of the traits follows the same preprocessing steps of the same in PLSR. The scaling and data partition uses the similar approaches to that of SLA prediction using RF. The only difference is that instead of using the trait name "SLA", the respective trait name for the analysis is used. The preprocessing steps vary across different traits but remain consistent with those of the PLSR model, as the same data is used. A uniform approach is followed to ensure comparability between models. The analysis of phosphorus content involved additional steps compared to the analysis of other traits. It used additional data from Kreinitz experiment [49] along with data from leaf trait study [15]. A detailed analysis is provided as a vignette (\url{https://github.com/georgejr45/Master-Thesis-IPB-THD-/blob/main/Vignette/Predict_traits_from_NIRS.html}), including the complete script and interactive plots. \\
+
+
+\subsection{Trait Prediction Using Convolutional Neural Network}
+Unlike the previous ML models such as PLSR and RF,  CNN is automatically learns features from the spectral data. It is a deep learning approach to predict the five leaf traits and the goal is to evaluate whether CNN can outperform the conventional models by comparing the $R^2$, RMSE and training time across all these models. This analysis follows similar preprocessing steps as the previous two ML approaches, as we are dealing with the same data and following a uniform protocol for better comparison. The data is from the leaf trait study [15] and all five traits were predicted using CNN. The CNN model, adapted from the leaf trait study [15], was reimplemented with two key modifications: the addition of an early stopping callback and padding within the CNN architecture.  Only the essential scripts for this analysis were used, omitting some components from the original study. \\
+
+\subsubsection*{Prediction of SLA using CNN}
+The SLA is the first trait in this analysis. The data is read from the excel sheet and the necessary preprocessing is done as same as in the previous analysis of SLA. The spectral data is saved into variable named "input" and the SLA values were extracted and saved into the the variable named "component\_SLA". The SLA trait data is then normalized using the \texttt{scale} function from R base package. A histogram and a QQ plot is created (figure \ref{fig:hist_CNN}) to study the distribution of SLA values. This part of the analysis includes recreating the results from leaf trait study[15] and hyper parameter tuning for better comparison with other ML models. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# Studying the distribution of the values for SLA
+component_SLA <- plantspec.data.sla$SLA
+
+component_SLA <- scale(component_SLA)
+
+par(mfcol = c(1, 2))
+qqnorm((component_SLA), pch = 1, frame = FALSE) # Checking normality of the variable
+qqline((component_SLA), col = "red", lwd = 2)
+
+hist((component_SLA)) # Checking distribution of the variable
+\end{lstlisting}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/hist_CNN.png}
+    \caption{Q-Q plot (left) illustrating normality of SLA and histogram (right) showing the distribution of SLA (scaled version) values [15]. The Q-Q plot compares the quantiles of component SLA (Y axis) to the quantile of normal distribution (X axis). Data points closer to the redline has the normal distribution. Deviation from this line indicates the presence of outliers. The histogram shows the frequency of distribution of the scaled SLA values. A perfectly normal distribution will result in a bell shaped histogram. }
+    \label{fig:hist_CNN}
+\end{figure}
+
+Similar to the previous SLA analysis, \texttt{subdivideDataset} function from \texttt{plantspec} package has been employed for defining the index for test and train split. It is followed by a custom function to scale the input (spectral) data. This function performs centering and scaling of the spectral data to remove the scattering and baseline shift. The data is then split into test and training set to train the CNN model and predict the response variables. About $70\%$ of the data is used for training the model while the rest is saved for testing. A detailed script along with plots are provided in the vignette (\url{https://github.com/georgejr45/Master-Thesis-IPB-THD-/blob/main/Vignette/CNN_to_predict_leaf_traits.html}).\\
+
+\subsubsection*{CNN Architecture}
+The CNN model was implemented with the use of \texttt{Keras3} (version $1.1.0$) library which works on the \texttt{TensorFlow} library, which is an open source ML framework developed by Google. \texttt{TensorFlow} provides an ecosystem to develop, train and deploy the machine learning (ML) and deep learning (DL) models and \texttt{Keras} is a high level DL application programming interface (API) which is built in top of \texttt{TensorFlow}. \\
+
+\begin{lstlisting}[language=R, style=mystyle, basicstyle=\small]
+#### Convolutional neural network (CNN) Architecture
+
+model.sla <- keras_model_sequential(input_shape = c(NULL, 2151, 1)) %>%
+
+  layer_conv_1d(filter = 2, kernel_size = 50, padding="same", kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
+  
+  layer_batch_normalization() %>%
+  
+  layer_max_pooling_1d(pool_size = 2) %>%
+  
+  layer_flatten() %>%
+  
+  layer_dense(128, kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
+  layer_dense(32, kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
+  layer_dense(8, kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
+  layer_dense(1, kernel_initializer=initializer_glorot_uniform(seed=0))
+\end{lstlisting}
+
+This CNN architecture consists of many layers for feature extraction and regression. The model is initialized with the help of \texttt{keras\_model\_sequential} function from \texttt{keras} and input shape is passed on to it as the argument. The input shape include, batch size, number of features(change with dimension of dataset) and number of channels. The output of this function is then passed as the first argument to the next layers through pipe operator($\%>\%$). The first layer following the model initialization is the convolutional layer. This layer extracts spectral patters and in this project with the help of $2$ filters of size $50$ (each filter spans 50 consecutive wavelengths). The \texttt{kernel\_initializer} argument specifies how the initial weights of the layer should be and is set to \texttt{initializer\_glorot\_uniform}, which helps to maintain gradient stability during model training. The \texttt{seed} is set to $0$ for reproducibility. Padding is set to "same" to escape the default "valid" padding from \texttt{keras}. In default settings, no padding is added at the edge of input data and this results in reduction of the input length.\\
+
+Followed by the first convolutional layer is the batch normalization layer. This layer is responsible for improving the model stability by computing the mean and variance and rescaling them to get consistent distribution. \\
+
+Normalized data from this layer is then passed on to a max-pooling layer for dimensionality reduction. The pool size is set to $2$, which reduces the spectral data ($2151$ features) to half ($1075$ features) of its original size. \\
+
+The next layer is called flatten layer, which is responsible for converting the outputs of previous layers into a one dimensional vector for passing to the dense layers of CNN model. This layer bridges convolutional layers to dense layers by applying the \texttt{layer\_flatten} function to the outputs of max-pooling layer. \\
+
+The fully connected layer, or in other words, dense layers, is created using four layers with different number of neurons in each layer. Each layer in the dense layer takes the number of neurons as the first argument followed by \texttt{kernel\_initializer}, specifying how the weights of the layer should be initialized. In this project we have used "Glorot Uniform initializer" with a fixed seed. Each layer has different purposes, the first dense layer with $128$ neurons helps to learn the high level spectral patters and captures the abstract features. This is then passed on to the next layer with $32$ neurons and it reduces the complexity by retaining only the important features. Third layer with $8$ neurons will further refine the already extracted features. The final layer with $1$ neuron will outputs a single continuous value. In this case each spectrum will output one SLA value.\\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/cnn_model.png}
+    \caption{CNN model architecture and parameters summary. This table summarizes the structure of the Convolutional Neural Network (CNN) used for SLA prediction. It includes details on each layer, output shape, and the number of trainable parameters.}
+    \label{fig:cnn_model}
+\end{figure}
+
+Next the CNN model is passed to \texttt{compile} function from \texttt{keras}, specifying how the model should be optimized and what loss function to use. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+model.sla %>% compile(
+  optimizer = "adam",
+  loss = "mean_squared_error")
+\end{lstlisting}
+
+The "adam" optimizer is used to optimize the model. Adam stands for Adaptive Moment Estimation and is an advanced gradient decent optimization technique used in DL. The optimizer controls the magnitude and speed of each parameter update by adjusting the learning rate, which guides the weights of the network based on the loss function gradient [51]. In this model, the loss function is defined as the "mean squared error". \\
+
+\subsubsection*{Define Early Stopping Callback}
+This deep learning model is trained over multiple "epochs" to minimize the loss function. Training for a longer period of time can lead to better results but also to overfitting, in which the model performs well during training and fails to the test data and a larger computational load. The \texttt{callback\_early\_stopping} function from \texttt{keras} is used to regulate the training process by stopping the training if no improvement in loss function is shown after a certain number of epochs. Each epoch is one complete pass of the entire dataset through the neural network. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# Define Early Stopping Callback
+
+early_stopping <- callback_early_stopping(
+  monitor = "val_loss",  # Monitor validation loss
+  patience = 500,        # Stop if no improvement for 500 epochs 
+  restore_best_weights = TRUE  # Restore weights from the best epoch
+    )
+\end{lstlisting}
+
+Here, the model stops the training if there is no improvement in loss function for $500$ epochs. This helps to reduce the training time to a huge extent and prevents overfitting. The training time for the CNN model predicting SLA was $28.11$ minutes before implementing the early stopping callback. After incorporating early stopping, the training time was reduced to $7.30$ minutes while maintaining the same $R^2$ value. This demonstrate the improved efficiency of the model without compromising in model performance. \\
+
+\subsubsection*{Training CNN model for SLA}
+The training of CNN for predicting SLA from NIRS data is implemented using the \texttt{fit} function from \texttt{keras} package. The time for training the model was recorded. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+start_time_sla_cnn <- Sys.time()
+
+history <- model.sla %>% fit(x=as.matrix(x.train), y=as.matrix(y.train),
+                         epochs = 5000,
+                         verbose = 1,
+                         validation_split = 0.2,
+                         shuffle = FALSE,
+                         callbacks = list(early_stopping)
+                         )
+                         
+end_time_sla_cnn <- Sys.time()
+\end{lstlisting}
+
+The first two arguments to the \texttt{fit} function is the spectral training data and the trait data. Both of them are converted to matrix while passing to the function to make it compatible with \texttt{TensorFlow}. It is then followed by defining the epochs number. Number of epochs varies depending on the trait, in the analysis of SLA trait, $5000$ epochs were given, meaning the dataset passes through the neural network $5000$ times if the early callback function is not satisfied.  In each epoch the model updates its weight to minimize the loss function. The verbose is set to $1$ to monitor real-time training progress. The validation split is set to $0.2$, which means $20\%$ of the training data will be allocated and used for validation of the model. During training, the model will be trained on $80\%$ of the training data and evaluates its performance on the remaining $20\%$ of data. The "shuffle" is set to "FALSE" to prevent the shuffling of data before training. This can be beneficial to data that follows an order such as NIRS data since shuffling can break patterns. Finally, the call back function is implemented to allow the model to stop training if validation loss does not improve for $500$ epochs (Figure \ref{fig:sla_traing_cnn}). \\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/sla_traing_cnn.png}
+    \caption{The CNN training model for SLA trait, illustrating the training and validation loss during training the model. The model's training was set to 5000 epochs and it stopped before reaching 1500 epochs.}
+    \label{fig:sla_traing_cnn}
+\end{figure}
+
+\subsubsection*{Model evaluation}
+The performance of the model was evaluated using the test dataset. For predicting the SLA values, \texttt{predict} function from the \texttt{caret} package was used. Once the model is trained it is then used to predict on unseen dataset (X.test). \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+prediction.test <- predict(model.sla, as.matrix(x.test))
+\end{lstlisting}
+
+The $R^2$ and RMSE values for the CNN model is calculated and is saved to the results for comparing with the other previous ML approaches. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# R^2 Value
+R2_test.sla <- cor(prediction.test, as.matrix(y.test))^2; R2_test.sla
+
+# Calculating the RMSE
+prediction.test <- as.numeric(prediction.test)
+y.test <- as.numeric(y.test[[1]])
+rmse_sla <- sqrt(mean((prediction.test - y.test)^2))
+\end{lstlisting}
+
+\subsubsection*{Visualization}
+The visualization is done with the help of \texttt{ggplot2} and \texttt{plotly} packages. Figure \ref{fig:sla_cnn} illustrates scatter plot created using the predicted from the CNN model and actual SLA values from this analysis.\\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/sla_cnn.png}
+    \caption{This plot illustrates the predictive ability of CNN for SLA trait. The dotted line represents perfect prediction and the red line represents relationship between predicted and measured values based on the linear regression. The closer the red and dotted lines are, the better the prediction. The colored regions in the margins represents distribution of the predicted and measured values.}
+    \label{fig:sla_cnn}
+\end{figure}
+
+\subsubsection*{Prediction of LDMC, C:N ratio, C and P content}
+Prediction of the rest of the leaf traits were also performed using the CNN model. The LDMC, Carbon content, Phosphorus content and Carbon to Nitrogen ratio is predicted using CNN. Each of these trait data were preprocessed similar to its analysis in the previous PLSR and RF model. It is then used to train the CNN model which uses the same CNN architecture for all traits. Since this analysis includes codes from the original script used in the leaf trait study with few modification to save training time and computational cost, each trait has different values for parameters. For instance, the kernal size of LDMC is different from that of Phosphorus content and the number of neurons are also different in each analysis. The only change we did compared to the original version is to add an early call back function to reduce computational load during training and zero padding to make all data points available during training. A detailed version of the analysis with interactive plots were presented as vignette (\url{https://github.com/georgejr45/Master-Thesis-IPB-THD-/
+blob/main/Vignette/CNN_to_predict_leaf_traits.html}) . \\
+
+
+\subsection{Extrapolation studies }
+\subsubsection*{Extrapolation study of PLSR}
 The extrapolation study is considered to evaluate the performance of the Partial Least Squares Regression (PLSR) under extreme conditions. This extrapolation studies are applied to both high and low data ranges by a specific data splitting strategy. In the highest range extrapolation study, the top $30\%$ of values reserved for testing while the rest $70\%$ of the data is used for training. This means, the model will be trained using the values of less variance and then subjected to test and predict on the unseen data of high variance (data outside of the training domain).\\
 
 A similar approach was applied to the lowest data range as well, where the lowest or the bottom $30\%$ of values were selected for testing while the rest of the data is used for training the model. This methodology allows for assessing the model's ability to predict beyond the range of trained or observed values and provide insights into its extrapolation capabilities.\\
@@ -1264,7 +1472,7 @@ X_scaled <- scale(X)
 Y_scaled <- scale(Y)
 \end{lstlisting}
 
-The preprocessing is done by removing the outlayers and extracting the values necessary for the analysis. Both $X$ and $Y$ variables are then scaled and prepared for splitting the data. \\
+The preprocessing is done by removing the outliers and extracting the values necessary for the analysis. Both $X$ and $Y$ variables are then scaled and prepared for splitting the data. \\
 
 \begin{lstlisting}[language=R, style=mystyle]
 # Highest 30% of Values
@@ -1318,92 +1526,8 @@ training_set_index_l <- which(component_SLA > cutoff_low)
 
 This function outputs, $30\%$ of the values in component\_SLA are below $13.60$, meaning the lowest $30\%$ of the values are below this threshold. The test and training set indices are created by selecting the indices of component\_SLA such that the values less than or equal to the threshold (cutoff\_low) are assigned to the test set, and the remaining values are assigned to the training set. This is then used to split the data accordingly and then proceed to the downstream analysis in the similar was to extrapolation study on upper data range.
 
-\subsection{Variable importance in PLSR}
-Variable importance is a technique used to identify the most influential features for the model's predictions. In this analysis, variable importance is found out using the \texttt{varImp} function from \texttt{caret} package. This function measures the variable importance for PLSR based on the weighed sums of the absolute regression coefficients. The weights are determined by how much they reduce the sum of squared errors across the PLS components. They are calculated individually for each outcome [50].\\
 
-For this analysis, the variable importance of SLA and carbon content was evaluated using the \texttt{varImp} function from \texttt{caret} package. This function calculates the importance of each features based on the level of its contribution to the overall prediction of the traits. \\ 
-
-\subsubsection*{Variable importance of SLA}
-The following R script is used to analyze the important variable during SLA prediction of PLSR model. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-# Variable importance of SLA in PLSR
-vi_sla <- varImp(pls_model, scale = F)
-
-# Extract the importance scores and make it into a data frame
-vi_sla_df <- as.data.frame(vi_sla$importance)
-
-# Define wavelength range
-wavelengths <- seq(350, 2500)
-
-# Create a data frame for plotting
-vi_sla_df <- data.frame(Wavelength = wavelengths, Overall = vi_sla_df)
-\end{lstlisting}
-
-The \texttt{varImp} function is used and the PLSR model for SLA from the previous analysis is passed on to the function as the first parameter. It also accepts optional parameters and can be given according to the data type and the research goal. This function will output data with feature name and its importance score. The scores are given to all the features in the study in this case the wavelength from $350$nm to $2500$nm. The output of this function is an object of class \texttt{varImp.train}. To visualize the output, the importance scores are extracted from the object and converted into a data frame. This data frame is then used in the ggplot2 function to create a graph of variable importance. Figure \ref{fig:vi_sla_plsr} shows the variable importance scores on the Y axis and features(wavelengths) in the X axis.  \\
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Figures/vi_sla_plsr.png}
-    \caption{The variable importance plot of PLSR model, illustrating the contribution deapth of different features(wavelength) during SLA trait prediction. The importance scores are given in the Y axis and higher the score more significant the corresponding wavelength is in predicting SLA trait of a plant. }
-    \label{fig:vi_sla_plsr}
-\end{figure}
-
-\subsubsection*{Variable importance of Carbon content}
-The variable importance in carbon content prediction using PLSR is also measured with the help of \texttt{varImp} function. The model corresponds to the carbon content is passed on to the function and it created a train object, from which the importance scores are extracted. This is followed by the visualization by \texttt{ggplot2}.\\
-
-
-\subsection{Trait Prediction Using Random Forest}
-Random Forest(RF), a nonlinear approach, was also chosen to evaluate predictive ability and model performance. Instead of classification, regression was performed using Random Forest. The data used is the same for the previous PLSR analysis. The aim is to evaluate and compare the results of RF with PLSR and CNN. The analysis does not require any additional libraries, since it follows a uniform approach and only differs in the method used for training. It uses the \texttt{plantspec} package for data splitting and \texttt{caret} package for training model and predicting the results. The visualization is done with the use of \texttt{ggplot2} and \texttt{plotly} packages. All five traits were predicted and the results were recorded for comparison.\\
-
-\subsubsection*{Data Loading, Preprocessing, Scaling, and Splitting}
-The steps for data loading, preprocessing, scaling and splitting follows the same approach as described for SLA prediction using PLSR. The main differences begin in the next step with model training for Random Forest
-
-
-\subsubsection*{Model Training}
-The \texttt{train} function from \texttt{caret} package is employed to create the RF model for predicting SLA trait. Compared to the PLSR model, the method used here is "rf" (Random Forest) instead of "pls" (Partial Least Squares Regression). Additionally, the RF model excludes certain parameters that were present in the PLSR model. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-# Training the model
-start_time_rf <- Sys.time()
-rf_model_sla <- train(SLA ~ ., data = train_data, method = "rf", ntree = 500)
-end_time_rf <- Sys.time()
-\end{lstlisting}
-
-\begin{itemize}
-    \item method: "rf" specifies the model being trained here is Random Forest
-    \item ntree: It is set to $500$ to improve accuracy and is set constant for every trait being analyzed by RF model.
-\end{itemize}
-
-The time for training the model was recorded for comparing the training time of each model from different ML approaches. In this analysis the \texttt{ntree} is set to $500$, it is the number of decision trees which will be used to built the RF model. The number of trees can be tuned for each data but we have used $500$ since, It is considered as a default value in many analysis. \\
-
-\subsubsection*{Model Evaluation}
-The performance of the model was evaluated using the test dataset. For predicting the SLA values, \texttt{predict} function from the \texttt{caret} package was used. In addition to that, \texttt{postResample} function from \texttt{caret} package is used to get the $R^2$ and RMSE values for comparison.\\
-
-\begin{lstlisting}[language=R, style=mystyle]
-# Predictions
-predictions_rf <- predict(rf_model_sla, newdata = X_test)
-
-# Evaluation metrics
-results_rf <- postResample(predictions_rf, Y_test)
-R_squared_rf <- results_rf[["Rsquared"]]
-rmse_values_rf <- results_rf[["RMSE"]]
-\end{lstlisting}
-
-\subsubsection*{Visualization}
-The \texttt{ggplot2} and \texttt{plotly} packages are employed for better visualization of the data. A dataframe with the test trait data (X\_test) and predicted trait values were created and passed on to the \texttt{ggplot} function to create the graph (Figure \ref{fig:sla_rf}).\\
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Figures/sla_rf.png}
-    \caption{The scatter plot created using ggplot2 package, illustrating the predicted and actual SLA values of random forest model}
-    \label{fig:sla_rf}
-\end{figure}
-
-\subsubsection*{Prediction of LDMC, C:N ratio, C and P content}
-The analysis of the rest of the traits follows the same preprocessing steps of the same in PLSR. The scaling and data partition uses the similar approaches to that of SLA prediction using RF. The only difference is that instead of using the trait name "SLA", the respective trait name for the analysis is used. The preprocessing steps vary across different traits but remain consistent with those of the PLSR model, as the same data is used. A uniform approach is followed to ensure comparability between models. The analysis of phosphorus content involved additional steps compared to the analysis of other traits. It used additional data from Kreinitz experiment [49] along with data from leaf trait study [15]. A detailed analysis is provided as a vignette, including the complete script and interactive plots. \\
-
-\subsection{Extrapolation study of RF}
+\subsubsection*{Extrapolation study of RF}
 \subsubsection*{Extrapolation at upper data rage}
 Extrapolation at upper data range in random forest include, the upper $30\%$ for testing and the rest for training. This follows similar steps compared to the previous RF analysis, except the data splitting strategy. Trait SLA has been chosen for the extrapolation study. The data is split using the \texttt{quantile} function from base R. The rest of the analysis is similar to the prediction of SLA using RF.\\
 
@@ -1439,7 +1563,55 @@ test_set_index_l <- which(component_SLA <= cutoff_low)
 training_set_index_l <- which(component_SLA > cutoff_low)
 \end{lstlisting}
 
-\subsection{Variable importance in RF}
+
+\subsubsection*{Extrapolation study of CNN}
+The extrapolation study in CNN involves the same process as that of PLSR and RF. It uses the same leaf trait (SLA), which is used in the previous extrapolation study to enable meaningful comparison. Extrapolation study is performed for both on higher data range as well as lower data range. The detailed version of the analysis along with the plots are provided in the vignette ( \url{https://github.com/georgejr45/Master-Thesis-IPB-THD-/
+blob/main/Vignette/CNN_to_predict_leaf_traits.html)}. Figure \ref{fig:extra_cnn_h} illustrate the result of extrapolation on the upper data range using CNN.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/extra_cnn_h.png}
+    \caption{The scatter plot illustrates the predicted versus actual SLA values for the extrapolation of the convolutional neural network model on the upper data range. The grey dotted line represents perfect prediction and the red line represents relationship between predicted and measured values based on the linear regression. }
+    \label{fig:extra_cnn_h}
+\end{figure}
+
+
+\subsection{Variable importance in PLSR and RF}
+\subsubsection*{Variable importance in PLSR}
+Variable importance is a technique used to identify the most influential features for the model's predictions. In this analysis, variable importance is found out using the \texttt{varImp} function from \texttt{caret} package. This function measures the variable importance for PLSR based on the weighed sums of the absolute regression coefficients. The weights are determined by how much they reduce the sum of squared errors across the PLS components. They are calculated individually for each outcome [50].\\
+
+For this analysis, the variable importance of SLA and carbon content was evaluated using the \texttt{varImp} function from \texttt{caret} package. This function calculates the importance of each features based on the level of its contribution to the overall prediction of the traits. \\ 
+
+\subsubsection*{Variable importance of SLA}
+The following R script is used to analyze the important variable during SLA prediction of PLSR model. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# Variable importance of SLA in PLSR
+vi_sla <- varImp(pls_model, scale = F)
+
+# Extract the importance scores and make it into a data frame
+vi_sla_df <- as.data.frame(vi_sla$importance)
+
+# Define wavelength range
+wavelengths <- seq(350, 2500)
+
+# Create a data frame for plotting
+vi_sla_df <- data.frame(Wavelength = wavelengths, Overall = vi_sla_df)
+\end{lstlisting}
+
+The \texttt{varImp} function is used and the PLSR model for SLA from the previous analysis is passed on to the function as the first parameter. It also accepts optional parameters and can be given according to the data type and the research goal. This function will output data with feature name and its importance score. The scores are given to all the features in the study in this case the wavelength from $350$nm to $2500$nm. The output of this function is an object of class \texttt{varImp.train}. To visualize the output, the importance scores are extracted from the object and converted into a data frame. This data frame is then used in the ggplot2 function to create a graph of variable importance. Figure \ref{fig:vi_sla_plsr} shows the variable importance scores on the Y axis and features(wavelengths) in the X axis.  \\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/vi_sla_plsr.png}
+    \caption{The variable importance plot of PLSR model, illustrating the contribution deapth of different features(wavelength) during SLA trait prediction. The importance scores are given in the Y axis and higher the score more significant the corresponding wavelength is in predicting SLA trait of a plant. }
+    \label{fig:vi_sla_plsr}
+\end{figure}
+
+\subsubsection*{Variable importance of Carbon content}
+The variable importance in carbon content prediction using PLSR is also measured with the help of \texttt{varImp} function. The model corresponds to the carbon content is passed on to the function and it created a train object, from which the importance scores are extracted. This is followed by the visualization by \texttt{ggplot2}.\\
+
+\subsubsection*{Variable importance in RF}
 Similar to the PLSR, variable importance of SLA and Carbon content was assessed using the \texttt{varImp} function from \texttt{caret} package. This function calculates the importance of each feature based on the level of its contribution to the overall prediction of the traits. \\ 
 
 \subsubsection*{Variable importance of SLA}
@@ -1459,179 +1631,46 @@ vi_sla_rf_df <- as.data.frame(vi_sla_rf$importance)
     \label{fig:vi_sla_rf}
 \end{figure}
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Figures/vi_rf_sla_zoomed.png}
+    \caption{Zoomed-in view of variable importance of SLA in RF within the 1600 to 1800 nm range (figure \ref{fig:vi_sla_rf})}
+    \label{fig:vi_sla_rf_zoom}
+\end{figure}
+
+
+
+
 \subsubsection*{Variable importance of Carbon content}
 The variable importance in carbon content prediction using random forest is also measured with the help of \texttt{varImp} function. The model corresponds to the carbon content is passed on to the function and it created a train object, from which the importance scores are extracted. This is followed by the visualization by \texttt{ggplot2}.\\
 
-\subsection{Trait Prediction Using Convolutional Neural Network}
-Unlike the previous ML models such as PLSR and RF,  CNN is automatically learns features from the spectral data. It is a deep learning approach to predict the five leaf traits and the goal is to evaluate whether CNN can outperform the conventional models by comparing the $R^2$, RMSE and training time across all these models. This analysis follows similar preprocessing steps as the previous two ML approaches, as we are dealing with the same data and following a uniform protocol for better comparison. The data is from the leaf trait study [15] and all five traits were predicted using CNN. The CNN model, adapted from the leaf trait study [15], was reimplemented with two key modifications: the addition of an early stopping callback and padding within the CNN architecture.  Only the essential scripts for this analysis were used, omitting some components from the original study. \\
 
-\subsubsection*{Prediction of SLA using CNN}
-The SLA is the first trait in this analysis. The data is read from the excel sheet and the necessary preprocessing is done as same as in the previous analysis of SLA. The spectral data is saved into variable named "input" and the SLA values were extracted and saved into the the variable named "component\_SLA". The SLA trait data is then normalized using the \texttt{scale} function from R base package. A histogram and a QQ plot is created to study the distribution of SLA values. This part of the analysis includes recreating the results from leaf trait study[15] and hyper parameter tuning for better comparison with other ML models. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-# Studying the distribution of the values for SLA
-component_SLA <- plantspec.data.sla$SLA
-
-component_SLA <- scale(component_SLA)
-
-par(mfcol = c(1, 2))
-qqnorm((component_SLA), pch = 1, frame = FALSE) # Checking normality of the variable
-qqline((component_SLA), col = "red", lwd = 2)
-
-hist((component_SLA)) # Checking distribution of the variable
-\end{lstlisting}
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Figures/hist_CNN.png}
-    \caption{Q-Q plot (left) illustrating normality of SLA and histogram (right) showing the distribution of SLA [15]}
-    \label{fig:hist_CNN}
-\end{figure}
-
-Similar to the previous SLA analysis, \texttt{subdivideDataset} function from \texttt{plantspec} package has been employed for defining the index for test and train split. It is followed by a custom function to scale the input (spectral) data. This function performs centering and scaling of the spectral data to remove the scattering and baseline shift. The data is then split into test and training set to train the CNN model and predict the response variables. About $70\%$ of the data is used for training the model while the rest is saved for testing. A detailed script along with plots are provided in the vignette.\\
-
-\subsubsection*{CNN Architecture}
-The CNN model was implemented with the use of \texttt{Keras3} (version $1.1.0$) library which works on the \texttt{TensorFlow} background, which is an open source ML frame work developed by google. \texttt{TensorFlow} provides an ecosystem to develop, train and deploy the ML and DL models and \texttt{Keras} is a high level DL application programming interface (API) which is built in top of \texttt{TensorFlow}. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-#### Convolutional neural network (CNN) Architecture
-
-model.sla <- keras_model_sequential(input_shape = c(NULL, 2151, 1)) %>%
-
-  layer_conv_1d(filter = 2, kernel_size = 50, padding="same", kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
-  
-  layer_batch_normalization() %>%
-  
-  layer_max_pooling_1d(pool_size = 2) %>%
-  
-  layer_flatten() %>%
-  
-  layer_dense(128, kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
-  layer_dense(32, kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
-  layer_dense(8, kernel_initializer=initializer_glorot_uniform(seed=0)) %>%
-  layer_dense(1, kernel_initializer=initializer_glorot_uniform(seed=0))
-\end{lstlisting}
-
-This CNN architecture consists of many layers for feature extraction and regression. The model is initialized with the help of \texttt{keras\_model\_sequential} function from \texttt{keras} and input shape is passed on to it as the argument. The input shape include, batch size, number of features(change with dimension of dataset) and number of channels. The output of this function is then passed as the first argument to the next layers through pipe operator($\%>\%$). The first layer following the model initialization is the convolutional layer. This layer extracts spectral patters and in this project with the help of $2$ filters of size $50$ (each filter spans 50 consecutive wavelengths). The \texttt{kernel\_initializer} argument specifies how the initial weights of the layer should be and is set to \texttt{initializer\_glorot\_uniform}, which helps to maintain gradient stability during model training. The \texttt{seed} is set to $0$ for reproducibility. Padding is set to "same" to escape the default "valid" padding from \texttt{keras}. In default settings, no padding is added at the edge of input data and this results in reduction of the input length.\\
-
-Followed by the first convolutional layer is the batch normalization layer. This layer is responsible for improving the model stability and training speed by computing the mean and variance and rescaling them to get consistent distribution.\\
-
-Normalized data from this layer is then passed on to a max-pooling layer for dimensionality reduction. The pool size is set to $2$, which reduces the spectral data ($2151$ features) to half ($1075$ features) of its original size. \\
-
-The next layer is called flatten layer, which is responsible for converting the outputs of previous layers into a one dimensional vector for passing to the dense layers of CNN model. This layer bridges convolutional layers to dense layers by applying the \texttt{layer\_flatten} function to the outputs of max-pooling layer. \\
-
-Fully connected layer or in other words dense layers is created using four layers with different numer of neurons in each layer. Each layer in the dense layer takes the number of neurons as the first argument followed by \texttt{kernel\_initializer}, specifying how the weights of the layer should be initialized. In this project we have used "Glorot Uniform initialization" with a fixed seed. Each layer has different purposes, the first dense layer with $128l$ neurons helps to learn the high level spectral patters and captures the abstract features. This is then passed on to the next layer with $32$ neurons and it reduce the complexity by retaining only the important features. Third layer with $8$ neurons will further refines the already extracted features. The final layer with $1$ neuron will outputs a single continuous value. In this case each spectrum will output one SLA value.\\
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Figures/cnn_model.png}
-    \caption{CNN model architecture and parameters summary. This table summarizes the structure of the Convolutional Neural Network (CNN) used for SLA prediction. It includes details on each layer, output shape, and the number of trainable parameters.}
-    \label{fig:cnn_model}
-\end{figure}
-
-Next the CNN model is passed to \texttt{compile} function from \texttt{keras}, specifying how the model should be optimized and what loss function to use. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-model.sla %>% compile(
-  optimizer = "adam",
-  loss = "mean_squared_error")
-\end{lstlisting}
-
-The "adam" optimizer is used to optimize the model. Adam stands for Adaptive Moment Estimation and is an advanced gradient decent optimization technique used in DL. The optimizer controls the magnitude and speed of each parameter update by adjusting the learning rate, which guides the weights of the network based on the loss function gradient [51]. In this model, the loss function is defined as the "mean squared error". \\
-
-\subsubsection*{Define Early Stopping Callback}
-This deep learning model is trained over multiple "epoches" to minimize the loss function. Training for a longer period of time can lead to overfitting, in which the model performs well during training and fails to the test data and a larger computational load. The \texttt{callback\_early\_stopping} function from \texttt{keras} is used to regulate the training process by stopping the training if no improvement in loss function is shown after a certain number of epoches. Each epoch is one complete pass of the entire dataset through the neural network. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-# Define Early Stopping Callback
-
-early_stopping <- callback_early_stopping(
-  monitor = "val_loss",  # Monitor validation loss
-  patience = 500,        # Stop if no improvement for 500 epochs 
-  restore_best_weights = TRUE  # Restore weights from the best epoch
-    )
-\end{lstlisting}
-
-Here, the model stops the training if there is no improvement in loss function after $500$ epoches. This helps to reduce the training time to a huge extent and prevents overfitting. The training time for the CNN model predicting SLA was $28.11$ minutes before implementing the early stopping callback. After incorporating early stopping, the training time was reduced to $7.30$ minutes while maintaining the same $R^2$ value. This demonstrate the improved efficiency of the model without compromising in model performance. \\
-
-\subsubsection*{Training CNN model for SLA}
-The training of CNN for predicting SLA from NIRS data is implemented using the \texttt{fit} function from \texttt{keras} package. The time for training the model was recorded. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-start_time_sla_cnn <- Sys.time()
-
-history <- model.sla %>% fit(x=as.matrix(x.train), y=as.matrix(y.train),
-                         epochs = 5000,
-                         verbose = 1,
-                         validation_split = 0.2,
-                         shuffle = FALSE,
-                         callbacks = list(early_stopping)
-                         )
-                         
-end_time_sla_cnn <- Sys.time()
-\end{lstlisting}
-
-The first two arguments to the \texttt{fit} function is the spectral training data and the trait data. Both of them are converted to matrix while passing to the function to make it compatable with \texttt{TensorFlow}. It is then followed by defining the epoches number. Number of epoches varies depending on the trait, in the analysis of SLA trait, $5000$ epoches were given, meaning the dataset passes through the neural network $5000$ times if the early callback function not satisfied.  In each epoch the model update its weight to minimize the loss function. The verbose is set to $1$ to monitor real-time training progress. The validation split is set to $0.2$, which means $20\%$ of the training data will be allocated and used for validation of the model. During training, the model will be trained on $80\%$ of the training data and evalutes its performance on the remaining $20\%$ of data. The "shuffle" is set to "FALSE" to prevent the shuffling of data before training. Finally, the call back function is implemented to allow the model to stop training if validation loss does not improve for $500$ epoches (Figure \ref{fig:sla_traing_cnn}). \\
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Figures/sla_traing_cnn.png}
-    \caption{The CNN training model for SLA trait, illustrating the training and validation loss during training the model. The model's training was set to 5000 epoches and it stopped before reaching 1500 epoches.}
-    \label{fig:sla_traing_cnn}
-\end{figure}
-
-\subsubsection*{Model evaluation}
-The performance of the model was evaluated using the test dataset. For predicting the SLA values, \texttt{predict} function from the \texttt{caret} package was used. Once the model is trained it is then used to predict on unseen dataset (X.test). \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-prediction.test <- predict(model.sla, as.matrix(x.test))
-\end{lstlisting}
-
-The $R^2$ and RMSE values for the CNN model is calculated and is saved to the results for comparing with the other previous ML approaches. \\
-
-\begin{lstlisting}[language=R, style=mystyle]
-# R^2 Value
-R2_test.sla <- cor(prediction.test, as.matrix(y.test))^2; R2_test.sla
-
-# Calculating the RMSE
-prediction.test <- as.numeric(prediction.test)
-y.test <- as.numeric(y.test[[1]])
-rmse_sla <- sqrt(mean((prediction.test - y.test)^2))
-\end{lstlisting}
-
-\subsubsection*{Visualization}
-The visualization is done with the help of \texttt{ggplot2} and \texttt{plotly} packages. Figure \ref{fig:sla_cnn} illustrates scatter plot created using the predicted from the CNN model and actual SLA values from this analysis.\\
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Figures/sla_cnn.png}
-    \caption{This plot illustrates the predictive ability of CNN for SLA trait}
-    \label{fig:sla_cnn}
-\end{figure}
-
-\subsubsection*{Prediction of LDMC, C:N ratio, C and P content}
-Prediction of the rest of the leaf traits were also performed using the CNN model. The LDMC, Carbon content, Phosphorus content and Carbon to Nitrogen ratio is predicted using CNN. Each of these trait data were preprocessed similar to its analysis in the previous PLSR and RF model. It is then used to train the CNN model which uses the same CNN architecture for all traits. Since this is a recreation of the original script from the leaf trait study with few modification to save training time and computational cost, each trait has different values for parameters. For instance, the kernal size of LDMC is different from that of Phosphorus content and the number of neurons are also different in each analysis. The only change we did compared to the original version is to add an early call back function to reduce computational load during training and zero padding to make all data points available during training. A detailed version of the analysis with interactive plots were presented as vignette. \\
 
 
 \section{LCMS Feature Prediction From NIRS Data}
 
 \subsection*{Background of the study}
-The dataset utilized for the prediction of LCMS features from NIRS data originates from a large scale field experiment known as the Jena experiment. This biodiversity experiment named \textit{LC-MS based plant metabolic profiles of thirteen grassland species grown in diverse neighbourhoods} has conducted in the city of Jena, Germany [14]. This study focuses on the influence of different ecological settings on secondary metabolites in plants. \\
+The dataset utilized for the prediction of LCMS features from NIRS data originates from a large scale field experiment known as The Jena experiment. This biodiversity experiment named \textit{LC-MS based plant metabolic profiles of thirteen grassland species grown in diverse neighbourhoods} was conducted in the city of Jena, Germany [14]. This study focuses on the influence of different ecological settings on secondary metabolites in plants. \\
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.9\textwidth]{Figures/LCMS.png}
-    \caption{Schematic representation of the Jena experiment}
+    \caption{Schematic representation of the LCMS feature prediction using NIRS spectra. The data(both NIRS and LCMS) is received from The Jena experiment (MTBLS1224), which is then used in this analysis to predict the LCMS features with three ML models.}
     \label{fig:lcms}
 \end{figure}
 
-Figure \ref{fig:lcms} illustrates the above ground plants from thirteen grassland species (seven grass and six herbs) which collected at four time points throughout the growing season, May, July, August and October in the year $2017$. These plants were grown in plots with different diversity levels, ranging from one species per plot to eight species per plot. The LCMS metabolic profiling was performed on shoot extracts using an Ultra-Performance Liquid Chromatography coupled with an Electrospray Ionization Quadrupole Time-of-Flight Mass Spectrometer (UPLC-ESI-Qq-TOF-MS). This acquired raw data is then preprocessed by applying missing data imputation, validity check on the features and batch correction. On the other hand, NIRS data for the same samples were collected separately using the ASD Fieldspec $4$ instrument. \\
+Figure \ref{fig:lcms} illustrates the above ground plants from thirteen grassland species (seven grass and six herbs) were collected at four time points throughout the growing season, May, July, August and October in the year $2018$. These plants were grown in plots with different diversity levels, ranging from one species per plot to eight species per plot. The LCMS metabolic profiling was performed on shoot extracts using an Ultra-Performance Liquid Chromatography coupled with an Electrospray Ionization Quadrupole Time-of-Flight Mass Spectrometer (UPLC-ESI-Qq-TOF-MS). This acquired raw data is then preprocessed by applying missing data imputation, validity check on the features and batch correction. On the other hand, NIRS data for the same samples were collected separately using the ASD Fieldspec $4$ instrument. \\
+
+\subsection{High Performance Computing (HPC) }
+The computational efficiency is considered as a crucial factor while dealing with a high dimensional data such as NIRS data. It is more important when the analysis of such high dimensional data involves ML approaches such as RF and CNN. An average time recorded for the RF and CNN during the first analysis involving only $196$ data points was $13$ minutes and $6$ minutes respectively. In the analysis of predicting LCMS features from NIRS data, involves $490$ data points and the response data will also be $53$ metabolites instead of $5$ traits in the previous analysis. The traditional computational resources proved to be insufficient, given the large scale nature of the dataset used in this study. To overcome this limitations, an HPC system equipped with Singularity containers within the Sun Grid Engine (SGE) framework is used for the analysis involving RF and CNN. \\
+
+The Sun Grid Engine (SGE) is a job scheduler or a queuing system used in HPC to effectively manage and distribute the computational tasks across multiple nodes in a cluster. It allocate the jobs to the nodes based on the availability and priority making the computation more efficient and fast. It support parallel job execution which helps to speed up the large scale computations. The singularity containers are used to execute the RF and CNN models within the SGE managed HPC system due to its portability and reproducibility. The singularity container all the software dependencies required for the ML models and this makes it easier to run it across different systems. A cluster in HPC is a group of interconnected computers working together as a single powerful machine to tackle complex computational tasks. Each computers in this environment is called "nodes" and it has its own processor, memory and storage like any other computer. \\
 
 
 
 \subsection{LCMS feature prediction using PLSR}
 \subsubsection*{Helper functions}
-Two helper functions were created to make a SummarizedExperiment object from the NIRS and LCMS data. The function to make SummarizedExperiment object from NIRS data uses the source code of \texttt{read\_summarizedexperiment\_asd} function from "nearspectRa" package, which we created in the beginning of this project. The function was not used directly, as modifications were required to extract additional metadata embedded in each sample name. Each sample had information about the season, replicate, species and campaign which were unique to the Jena experiment. The \texttt{read\_summarizedexperiment\_asd} function which takes the file path as an input and outputs a SummarizedExperiment object is called from another R script named "NIRS\_summarizedExperiment\_sue.R". \\
+Two helper functions were created to make a SummarizedExperiment object from the NIRS and LCMS data. The function to make SummarizedExperiment object from NIRS data uses the source code of \texttt{read\_summarizedexperiment\_asd} function from "nearspectRa" package, which we created in the beginning of this project (R toolbox development). The function was not used directly, as modifications were required to extract additional metadata embedded in each sample name. Each sample had information about the season, replicate, species and campaign which were unique to the Jena experiment. The \texttt{read\_summarizedexperiment\_asd} function which takes the file path as an input and outputs a SummarizedExperiment object is called from another R script named "NIRS\_summarizedExperiment\_sue.R". \\
 
 \begin{lstlisting}[language=R, style=mystyle]
 # source the SE function
@@ -1693,9 +1732,44 @@ Both predictor(NIRS) and response(LCMS) data are scaled and a data frame named "
 \end{figure}
 
 \subsection{LCMS feature prediction using RF}
+The prediction of LCMS features from NIRS data using RF, involves similar RF architecture as to the one used in the previous analysis of leaf trait prediction. In this analysis the R script for RF contains functions to process NIRS and LCMS data into SummarizedExperiment object. The assay of this data is then extracted and assigned to predictor(NIRS) and response(LCMS) data. It also checks for a metabolite index as command line argument and convert it into a numeric value to make sure it is a valid input. Similar to the preprocessing steps performed in LCMS feature prediction using PLSR, both predictor aas well as the response data are transposed and applied a custom function to standardize row names to match across datasets. From this dataset, common samples are selected and applied a custom function response data to remove the metabolite columns which has more than $10$ zero values. The metabolite to predict is then selected by retrieving the name of the metabolite corresponding to the given index and extracting its intensities column from the response data matrix. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+metabolite_list <- colnames(response_filtered)
+if (metabolite_index < 1 || metabolite_index > length(metabolite_list)) {
+  stop(paste("Metabolite index out of range. Choose a number between 1 and ", length(metabolite_list)))
+}
+
+metabolite <- metabolite_list[metabolite_index]
+response_vector <- response_filtered[, metabolite]
+
+\end{lstlisting}
+
+This resulting response vector data along with predictor data is then scaled, split into test and train data set and a a data frame is then created to pass on to the train function for RF model training. The training time is recorded and predictions were made using this RF model. Finally, the evaluation matrics used in this study such as $R^2$, RMSE are calculated and saved to a data frame along with training time of each model. These results are then saved into a CSV file for further evaluation. \\
+
+This R script is executed in the HPC cluster using the SGE queuing system. A shell script(sge\_arrayjob\_RF.sh) is created that runs the R script for RF inside a singularity container. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+
+singularity run /vol/kubernetes/Singularity/images/rstudio-ipb-715be9329812 Rscript ~/path/to/HPC_RF.R ${SGE_TASK_ID}
+
+\end{lstlisting}
+
+The job of running this script is submitted to the HPC cluster by specifying the range of metabolites to be analyzed, which was $53$ in this study(after preprocessing). The analysis is performed for one metabolite at a time on the different nodes of HPC cluster, specified by an index (ranging from 1 to 53).
+The following script is used to submit the job to the HPC cluster. \\
+
+\begin{lstlisting}[language=R, style=mystyle]
+# Submit the job to HPC
+qsub -t 1-53 -o HPC/output/ -e HPC/output/ ~/sge_arrayjob_RF.sh
+
+# To start the HPC run,
+qstat
+
+\end{lstlisting}
+
+\subsection{LCMS feature prediction using CNN}
 
 
-\section{HPC runs}
 
 
 \chapter{Results and Discussion}
