@@ -337,6 +337,7 @@ print (results_pls_c)
 
 
 ```
+
 #### ggplot of Carbon content prediction
 ```{r}
 
@@ -722,12 +723,6 @@ ggplotly(p_sla)
 
 ```
 
-
-
-
-```{r echo=TRUE, results='hide'}
-
-```
 
 
 ### Leaf Dry Matter Content (LDMC)
@@ -1130,7 +1125,7 @@ results_rf_e_h
 
 
 ```{r}
-#ggplot
+# ggplot
 rf_df_e_h <- data.frame(Actual_SLA = Y_test_e_h, Predicted_SLA = predictions_e_h)
 
 p_e_h_rf <- ggplot(rf_df_e_h, aes(x = Actual_SLA, y = Predicted_SLA)) +
@@ -1225,22 +1220,13 @@ v_sla_rf <- ggplot(vi_sla_rf_df, aes(x = Wavelength, y = Overall)) +
 
 
 
-```{r}
-
-
-
-
-```
-
-
-
-
 
 ```{r }
 # ggplot
 ggplotly(v_sla_rf)
 
 ```
+
 
 #### Variable importance of C
 ```{r echo=T, results="hide"}
@@ -1267,14 +1253,13 @@ v_c_rf <- ggplot(vi_c_rf_df, aes(x = Wavelength, y = Overall)) +
 # ggplot
 ggplotly(v_c_rf)
 
-v_c_rf
 
 ```
 
 ### PLSR and RF Model Performance Comparison
 
 
-#### Comparing R square and training time
+#### Comparing R-square and training time
 
 ```{r}
 library(plotly)
@@ -1301,7 +1286,7 @@ plot_ly(data,
         x = ~Trait,
         y = ~Model_Numeric,
         z = ~R2,
-        color = ~Training_Time, # Color by Training Time
+        color = ~Training_Time, 
         type = 'scatter3d',
         hoverinfo = "text",
         text = ~paste("Trait: ", Trait, "\nModel: ", Model, "\nR2: ", R2, "\nTraining Time: ", Training_Time),
@@ -1309,8 +1294,8 @@ plot_ly(data,
           symbol = 'circle',
           line = list(width = 0)
         ),
-        colors = viridis(100),  # Use viridis for Training Time
-        colorbar = list(title = "Training Time (seconds)") # Colorbar for training time
+        colors = viridis(100),  
+        colorbar = list(title = "Training Time (seconds)") 
 ) %>%
   layout(title = "3D Scatter Plot (RF & PLSR)",
          scene = list(
