@@ -12,7 +12,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,  warning=FALSE, message = FALSE)
 ```
-Authors: Methun George, Dr. Steffen Neumann and Pablo Castro Sánchez-Bermejo
+Authors: Methun George and Dr. Steffen Neumann 
 
 
 The vignette is inspired from "Tree and mycorrhizal fungal diversity drive intraspecific and intraindividual trait variation in temperate forests: Evidence from a tree diversity experiment" (https://doi.org/10.1111/1365-2435.14549) conducted by Pablo Castro Sánchez-Bermejo. In this study, we focus on predicting five leaf traits such as Specific Leaf Area (SLA), Leaf Dry Matter Content (LDMC), Carbon Content, Phosphorus Content, and Carbon-to-Nitrogen Ratio (C:N) using a Convolutional Neural Network (CNN). 
