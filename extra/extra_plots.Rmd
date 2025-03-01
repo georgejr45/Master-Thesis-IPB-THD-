@@ -1,0 +1,525 @@
+---
+title: "plots for the results"
+author: "Methun George"
+date: "2025-02-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Your data (replace with your actual data)
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", 
+            "SLA", "LDMC", "C:N", "C", "P", 
+            "SLA", "LDMC", "C:N", "C", "P"),
+  Model = factor(c(rep("PLSR", 5), rep("RF", 5), rep("CNN", 5)), levels = c("PLSR", "RF", "CNN")),
+  Type = rep("Training", 15),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 
+         0.87, 0.54, 0.57, 0.37, 0.50, 
+         0.88, 0.85, 0.59, 0.46, 0.52)
+)
+
+data_melted <- melt(data, id.vars = c("Trait", "Model", "Type"), measure.vars = "R2", value.name = "R2")
+
+ggplot(data_melted, aes(x = Model, y = Trait, fill = R2)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "darkblue") +  # Adjust colors as needed
+  labs(title = "Comparing R-squared Values", x = "Model", y = "Trait", fill = "R-squared") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+library(ggplot2)
+library(ggthemes)  # For modern themes
+
+# Your data
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P"),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7), rep("CNN", 5)), levels = c("PLSR", "RF", "CNN")),
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08, 0.88, 0.85, 0.59, 0.46, 0.52),
+  RMSE = c(0.40, 0.41, 0.50, 0.55, 0.64, 1.02, 0.41, 0.42, 0.72, 0.63, 0.82, 0.66, 1.29, 0.74, 0.39, 0.35, 0.60, 0.70, 0.70)
+)
+
+# Filter out extrapolation data
+data <- subset(data, Type == "Training")  # Keep only "Training" rows
+
+j1 <- ggplot(data, aes(x = Model, y = R2, fill = Model)) +
+  geom_boxplot() +
+  labs(title = "R-squared Distribution by Model", x = "Model", y = "R-squared") +
+  scale_fill_manual(values = c("#0072B5", "#D55E00", "#009E73")) + # Modern color palette
+  theme_bw() +
+  facet_wrap(~Type) # Facet by Training/Extrapolation
+
+# Repeat the above for RMSE
+j2 <- ggplot(data, aes(x = Model, y = RMSE, fill = Model)) +
+  geom_boxplot() +
+  labs(title = "RMSE Distribution by Model", x = "Model", y = "RMSE") +
+  scale_fill_manual(values = c("#0072B5", "#D55E00", "#009E73")) + # Modern color palette
+  theme_bw() +
+  facet_wrap(~Type) # Facet by Training/Extrapolation
+
+ggplotly(j1)
+ggplotly(j2)
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Your data (as provided)
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P"),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7), rep("CNN", 5)), levels = c("PLSR", "RF", "CNN")),
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08, 0.88, 0.85, 0.59, 0.46, 0.52),
+  RMSE = c(0.40, 0.41, 0.50, 0.55, 0.64, 1.02, 0.41, 0.42, 0.72, 0.63, 0.82, 0.66, 1.29, 0.74, 0.39, 0.35, 0.60, 0.70, 0.70)
+)
+
+# Filter out extrapolation data
+data_training <- data %>% filter(Type == "Training")
+f3 <- ggplot(data_training, aes(x = RMSE, y = R2, shape = Model, color = Model, fill = Model)) +  # Added fill = Model
+  geom_point(size = 3, stroke = 1) +  # Added stroke for better visibility
+  scale_shape_manual(values = c(21, 22, 23)) + # Different shapes for each model
+  scale_fill_manual(values = c("PLSR" = "darkblue", "RF" = "darkred", "CNN" = "darkgreen")) + #added color to fill
+  scale_color_manual(values = c("PLSR" = "darkblue", "RF" = "darkred", "CNN" = "darkgreen")) + #added color to border
+  theme_minimal() +
+    theme(panel.grid.major = element_blank(), #Remove grid lines
+          panel.border = element_blank(),
+          panel.background = element_blank(),
+          axis.ticks = element_blank()) +
+  labs(title = "Scatter Plot of R² vs. RMSE", x = "RMSE", y = "R²")
+
+print(f3)
+```
+
+
+```{r}
+
+data <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)" ),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7), rep("CNN", 7)), levels = c("PLSR", "RF", "CNN")), # Important for ordering
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08, 0.88, 0.85, 0.59, 0.46, 0.52, 0.22, 0.31),
+  RMSE = c(0.40, 0.41, 0.50, 0.55, 0.64, 1.02, 0.41, 0.42, 0.72, 0.63, 0.82, 0.66, 1.29, 0.74, 0.39, 0.35, 0.60, 0.70, 0.70, 0.66, 0.65)
+)
+# Your data (add training time to the data frame)
+data$Training_Time <- c(13.76, 11.40, 15.71, 13.63, 15.19, 14.18, 12.91, 12.85*60, 12.11*60, 12.60*60, 13.17*60, 15.25*60, 11.78*60, 11.98*60, 8.84*60, 6.01*60, 4.02*60, 5.07*60, 30.78, 6.46*60, 3.20*60) # in seconds, convert minutes to seconds for RF and CNN
+
+ggplot(data, aes(x = Training_Time, y = R2, color = Model, shape=Type)) +
+  geom_point(size = 3) +
+  labs(title = "R-squared vs. Training Time", x = "Training Time (seconds)", y = "R-squared", color = "Model", shape="Type") +
+  scale_color_manual(values = c("darkblue", "darkgreen", "darkred")) + # Customize colors
+  theme_bw() +
+  scale_x_log10() # Use log scale if training times vary greatly
+```
+
+
+```{r}
+library(plotly)
+library(dplyr)
+
+# Filter out extrapolation data
+data_filtered <- data %>%
+  filter(Type == "Training") %>%
+  mutate(Training_Time_min = Training_Time / 60)  # Convert time to minutes for readability
+
+# Create the 3D scatter plot
+fig <- plot_ly(data_filtered, 
+               x = ~Training_Time_min, 
+               y = ~R2, 
+               z = ~Model, 
+               type = "scatter3d", 
+               mode = "markers", 
+               marker = list(size = 6, color = ~as.numeric(as.factor(Model)), colorscale = "Viridis")) 
+
+# Add labels and layout
+fig <- fig %>% layout(
+  title = "3D Plot: R² vs Training Time across Models",
+  scene = list(
+    xaxis = list(title = "Training Time (min)"),
+    yaxis = list(title = "R²"),
+    zaxis = list(title = "Model")
+  )
+)
+
+# Show plot
+fig
+
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+
+# Convert training time to minutes and remove extrapolation data
+data_filtered <- data %>%
+  filter(Type == "Training") %>%
+  mutate(Training_Time_min = Training_Time / 60)  # Convert seconds to minutes
+
+# Create the heatmap
+ggplot(data_filtered, aes(x = Model, y = Trait, fill = Training_Time_min)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Training_Time_min, 1)), color = "black", size = 4) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Training Time (min)") +
+  labs(title = "Heatmap of Training Time Across Models and Traits",
+       x = "Model",
+       y = "Trait") +
+  theme_minimal()
+
+
+```
+
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Filter out extrapolation data
+filtered_data <- data %>%
+  filter(Type == "Training")
+
+# Create the ggplot
+ggplot(filtered_data, aes(x = R2, y = Model, color = Trait, group = Trait)) +
+  geom_point(size = 4) +
+  theme_minimal() +
+  labs(title = "Comparing the predictive accuracy of ML models using R-square value", 
+       x = expression(R^2), 
+       y = "Model",
+       color = "Trait") +
+  theme(legend.position = "right")
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Filter out extrapolation data
+filtered_data <- data %>%
+  filter(Type == "Training")
+
+# Create the line plot
+ggplot(filtered_data, aes(x = Trait, y = RMSE, color = Model, group = Model)) +
+  geom_line(size = 1.2) +  
+  geom_point(size = 3) +  
+  theme_minimal() +
+  labs(title = "Error rate (RMSE) of Machine Learning Models Across Traits", 
+       x = "Trait", 
+       y = "RMSE",
+       color = "Model") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
+        legend.position = "right")
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Filter out extrapolation data
+filtered_data <- data %>%
+  filter(Type == "Training")
+
+# Create the bar plot
+ggplot(filtered_data, aes(x = Trait, y = Training_Time, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("darkred", "#3D2785", "#009E73")) +
+  theme_minimal() +
+  labs(title = "Training Time Comparison of ML Models Across Traits", 
+       x = "Trait", 
+       y = "Training Time (seconds)", 
+       fill = "Model") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+```
+
+
+```{r}
+# Filter for Extrapolation Type
+extrapolation_data <- data[data$Type == "Extrapolation", ]
+library(ggplot2)
+
+# Scatter plot for Extrapolation results with Trait added
+ggplot(extrapolation_data, aes(x = RMSE, y = R2, color = Model, shape = Trait)) + 
+  geom_point(size = 4) +
+  labs(title = "Extrapolation Results for Different Models",
+       x = "RMSE",
+       y = "R²") +
+  theme_minimal() +
+  scale_color_manual(values = c("PLSR" = "#b30000", "RF" = "#00bfa0", "CNN" = "#4421af")) +
+  scale_shape_manual(values = c("SLA (H 30%)" = 17, "SLA (L 30%)" = 16, "SLA" = 15, "LDMC" = 15, "C:N" = 15, "C" = 15, "P" = 15))
+
+
+
+```
+
+
+####### Plotting the effect of dimensionality reduction
+
+```{r}
+# Original results (2151 features)
+
+data1 <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)", "SLA", "LDMC", "C:N", "C", "P", "SLA (H 30%)", "SLA (L 30%)" ),
+  Model = factor(c(rep("PLSR", 7), rep("RF", 7), rep("CNN", 7)), levels = c("PLSR", "RF", "CNN")), # Important for ordering
+  Type = c(rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2), rep("Training", 5), rep("Extrapolation", 2)),
+  R2 = c(0.89, 0.85, 0.72, 0.68, 0.66, 0.26, 0.27, 0.87, 0.54, 0.57, 0.37, 0.50, 0.05, 0.08, 0.88, 0.85, 0.59, 0.46, 0.52, 0.22, 0.31),
+  RMSE = c(0.40, 0.41, 0.50, 0.55, 0.64, 1.02, 0.41, 0.42, 0.72, 0.63, 0.82, 0.66, 1.29, 0.74, 0.39, 0.35, 0.60, 0.70, 0.70, 0.66, 0.65)
+)
+
+# Feature engineered data
+data2 <- data.frame(
+  Trait = c("SLA", "LDMC", "C:N", "C", "P", "SLA", "LDMC", "C:N", "C", "P",  "SLA", "LDMC", "C:N", "C", "P" ),
+  Model = factor(c(rep("PLSR", 5), rep("RF", 5), rep("CNN", 5)), levels = c("PLSR", "RF", "CNN")), # Important for ordering
+  Type = c(rep("Training", 5), rep("Training", 5), rep("Training", 5)),
+
+  R2 = c(0.90, 0.82,0.76,0.63,0.69,0.86,0.74,0.60,0.58,0.68,0.88,0.86,0.69,0.64,0.66),
+  RMSE = c(0.37,0.44,0.48,0.68,0.60,0.44,0.55,0.59,0.67,0.59,0.43,0.45,0.78,0.66,0.52)
+)
+
+
+
+library(ggplot2)
+
+# Remove extrapolation values from data1
+data1 <- data1 %>% filter(Type == "Training")
+
+# Combine both datasets with a new column to identify them
+data1$Dataset <- "Feature Engineered"
+data2$Dataset <- "Original Features"
+combined_data <- rbind(data1, data2)
+
+# Plot
+ggplot(combined_data, aes(x = RMSE, y = R2, color = Trait, shape = Dataset)) +
+  geom_point(size = 4) +
+  labs(title = "Effect of Dimensionality Reduction on ML Model Performance",
+       x = "RMSE",
+       y = "R²") +
+  theme_minimal() +
+  scale_shape_manual(values = c(16, 17))  # Different shapes for datasets
+
+
+
+```
+
+## Plots of LCMS 
+
+# PLSR
+```{r}
+plsr <- read.csv("/Users/methungeorge/Desktop/Master-Thesis-IPB-THD-/outputs/PLSR_Results_LCMS.csv")
+
+r2_data_plsr <- plsr[, c(1,2)]
+
+# Load required library
+library(ggplot2)
+
+# Overlayed plot
+p1 <- ggplot(r2_data_plsr, aes(x = factor(1), y = R2)) +
+  # Violin plot
+  geom_violin(fill = "#87BB62", color = "black", outlier.color = "red", trim = FALSE) +
+  # Boxplot overlayed
+  geom_boxplot(fill = "#1f77b4", color = "black", outlier.color = "red", width = 0.2) +
+  labs(title = "Violin and Boxplot of R² Distribution (PLSR)", 
+       y = "R² Value", 
+       x = "") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 12),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) 
+
+
+p1
+#
+
+```
+
+# RF
+```{r}
+rf <- read.csv("/Users/methungeorge/Desktop/Master-Thesis-IPB-THD-/outputs/RF_LCMS_Results.csv")
+
+r2_data_rf <- rf[, c(2,3)]
+
+# Load required library
+library(ggplot2)
+
+# Overlayed plot
+p2 <- ggplot(r2_data_rf, aes(x = factor(1), y = R2)) +
+  # Violin plot
+  geom_violin(fill = "#B6A6E9", color = "black", outlier.color = "red", trim = FALSE) +
+  # Boxplot overlayed
+  geom_boxplot(fill = "#87BB62", color = "black", outlier.color = "red", width = 0.2) +
+  labs(title = "Violin and Boxplot of R² Distribution (RF)", 
+       y = "R² Value", 
+       x = "") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 12),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) 
+
+
+p2
+# 
+
+```
+
+
+# CNN
+
+```{r}
+cnn <- read.csv("/Users/methungeorge/Desktop/Master-Thesis-IPB-THD-/outputs/CNN_Results_LCMS.csv")
+
+
+r2_data_cnn <- cnn[, c(2,3)]
+
+# Load required library
+library(ggplot2)
+
+p3 <- ggplot(r2_data_cnn, aes(x = "", y = R2)) +   
+  # Violin plot  
+  geom_violin(fill = "#F8AE54", color = "black", trim = FALSE) +   
+  # Boxplot overlayed   
+  geom_boxplot(fill = "#876FD4", color = "black", width = 0.2, outlier.color = "red") +   
+  labs(title = "Violin and Boxplot of R² Distribution (CNN)",       
+       y = "R² Value",       
+       x = "") +   
+  theme_minimal() +   
+  theme(axis.title.x = element_blank(),         
+        axis.text.x = element_blank(),         
+        axis.ticks.x = element_blank(),         
+        plot.title = element_text(size = 12),         
+        axis.title.y = element_text(size = 10),         
+        axis.text.y = element_text(size = 10))    
+
+p3
+# 
+```
+
+
+# combined plot
+```{r}
+combined_plot <- p1 | p2 | p3
+combined_plot
+```
+
+```{r}
+plsr <- read.csv("/Users/methungeorge/Desktop/Master-Thesis-IPB-THD-/outputs/PLSR_Results_LCMS.csv")
+
+rmse_data_plsr <- plsr[, c(1,3)]
+
+# Load required library
+library(ggplot2)
+
+# Overlayed plot
+pp1 <- ggplot(rmse_data_plsr, aes(x = factor(1), y = RMSE)) +
+  # Violin plot
+  geom_violin(fill = "#87BB62", color = "black", outlier.color = "red", trim = FALSE) +
+  # Boxplot overlayed
+  geom_boxplot(fill = "#1f77b4", color = "black", outlier.color = "red", width = 0.2) +
+  labs(title = " RMSE Distribution (PLSR)", 
+       y = "RMSE Value", 
+       x = "") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 12),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) 
+
+pp1
+#Violin and Boxplot of RMSE Distribution (PLSR)
+```
+
+```{r}
+rf <- read.csv("/Users/methungeorge/Desktop/Master-Thesis-IPB-THD-/outputs/RF_LCMS_Results.csv")
+
+rmse_data_rf <- rf[, c(2,4)]
+
+# Load required library
+library(ggplot2)
+
+# Overlayed plot
+pp2 <- ggplot(rmse_data_rf, aes(x = factor(1), y = RMSE)) +
+  # Violin plot
+  geom_violin(fill = "#B6A6E9", color = "black", outlier.color = "red", trim = FALSE) +
+  # Boxplot overlayed
+  geom_boxplot(fill = "#87BB62", color = "black", outlier.color = "red", width = 0.2) +
+  labs(title = " RMSE Distribution (RF)", 
+       y = "RMSE Value", 
+       x = "") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 12),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) 
+
+
+pp2
+
+#Violin and Boxplot of RMSE Distribution (RF)
+```
+
+```{r}
+cnn <- read.csv("/Users/methungeorge/Desktop/Master-Thesis-IPB-THD-/outputs/CNN_Results_LCMS.csv")
+
+
+rmse_data_cnn <- cnn[, c(2,4)]
+
+# Load required library
+library(ggplot2)
+
+pp3 <- ggplot(rmse_data_cnn, aes(x = "", y = RMSE)) +   
+  # Violin plot  
+  geom_violin(fill = "#F8AE54", color = "black", trim = FALSE) +   
+  # Boxplot overlayed   
+  geom_boxplot(fill = "#876FD4", color = "black", width = 0.2, outlier.color = "red") +   
+  labs(title = "RMSE Distribution (CNN) ",       
+       y = "RMSE Value",       
+       x = "") +   
+  theme_minimal() +   
+  theme(axis.title.x = element_blank(),         
+        axis.text.x = element_blank(),         
+        axis.ticks.x = element_blank(),         
+        plot.title = element_text(size = 12),         
+        axis.title.y = element_text(size = 10),         
+        axis.text.y = element_text(size = 10))    
+pp3
+#Violin and Boxplot of RMSE Distribution (CNN)
+```
+
+```{r}
+combined_plot2 <- pp1 | pp2 | pp3
+combined_plot2
+```
+
+# VI in LCMS
+
+```{r}
+
+```
+
