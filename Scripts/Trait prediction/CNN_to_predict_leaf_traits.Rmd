@@ -832,7 +832,7 @@ plotly::ggplotly(p5)
 
 
 # Extrapolation of CNN
-```{r}
+```{r echo=T, results="hide"}
 # Study on SLA trait
 # Data processing
 # Removing outlayer from the samples
@@ -857,9 +857,7 @@ Y_scaled <- scale(Y)
 
 
 ### Extrapolation on upper 30% of values
-```{r}
-
-
+```{r echo=T, results="hide"}
 set.seed(0)
 #Highest 30% of Values
 cutoff <- quantile(component_SLA, 0.7, na.rm = TRUE)
@@ -940,14 +938,16 @@ p1_e_h <- ggplot(data = data.plot, aes(y = Predicted, x = Measured)) +
   theme(plot.title=element_text(hjust=0.5, size = 20)) 
 
   sla.test_e_h <- ggMarginal(p1_e_h, size = 6, fill = "#B22623", color = "#B22623", alpha = 0.5)
+```
 
 
+```{r}
 sla.test_e_h
 
 ```
 
 ### Extrapolation on Lowest 30% of values
-```{r}
+```{r echo=T, results="hide"}
 set.seed(0)
 
 # Define the cutoff
@@ -1031,8 +1031,10 @@ p1_e_l <- ggplot(data = data.plot, aes(y = Predicted, x = Measured)) +
   theme(plot.title=element_text(hjust=0.5, size = 20)) 
 
   sla.test_e_l <- ggMarginal(p1_e_l, size = 6, fill = "#B22623", color = "#B22623", alpha = 0.5)
+```
 
 
+```{r }
 sla.test_e_l
 
 ```
@@ -1041,10 +1043,10 @@ sla.test_e_l
 
 # Correlation Between Measured Traits and CNN Predictions
 
-```{r echo=T, results="hide"}
+```{r "}
 # Plot: Correlations between measured traits and predicted values by CNN
 grid.arrange(sla.test, ldmc.test, cn.test, c.test, p.test,
-              nrow = 2) # EXPORT AS 9 x 20 inches
+              nrow = 2) 
 ```
 
 

@@ -1337,11 +1337,11 @@ data_melted <- melt(data, id.vars = c("Trait", "Model", "Type"), measure.vars = 
 
 e1 <- ggplot(data_melted, aes(x = Model, y = Trait, fill = R2)) +
   geom_tile() +
-  scale_fill_gradient(low = "white", high = "darkblue") + # Adjust colors as needed
+  scale_fill_gradient(low = "white", high = "darkblue") + 
   labs(title = "R-squared Values (PLSR and RF Only)", x = "Model", y = "Trait", fill = "R-squared") +
-  theme_bw() +  # Clean theme
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotate x-axis labels if needed
-  facet_wrap(~Type, scales = "free_y") # Separate training and extrapolation
+  theme_bw() +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~Type, scales = "free_y") 
 
 e1
 ```
